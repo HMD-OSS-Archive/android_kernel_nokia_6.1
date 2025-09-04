@@ -343,7 +343,6 @@ static int eeprom_parse_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 
 	e_ctrl->cal_data.mapdata = NULL;
 	e_ctrl->cal_data.num_data = msm_get_read_mem_size(eeprom_map_array);
-	pr_info("%s:%d num_data = %d\n", __func__, __LINE__, e_ctrl->cal_data.num_data);
 	if (e_ctrl->cal_data.num_data <= 0) {
 		pr_err("%s:%d Error in reading mem size\n",
 			__func__, __LINE__);
@@ -365,9 +364,9 @@ static int eeprom_parse_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 			e_ctrl->i2c_client.client->addr =
 				eeprom_map->slave_addr >> 1;
 		}
-		pr_info("%s:%d slave Addr: 0x%X\n", __func__, __LINE__, eeprom_map->slave_addr); /* MM-JF-implement-dual-cam-recalibration-00+ */
+		pr_info("%s:%d Slave Addr: 0x%X\n", __func__, __LINE__, eeprom_map->slave_addr); /* MM-JF-implement-dual-cam-recalibration-00+ */
 		fih_camera_bbs_set((int)e_ctrl->pdev->id,e_ctrl->i2c_client.cci_client->cci_i2c_master,(unsigned short)e_ctrl->i2c_client.cci_client->sid,FIH_BBS_CAMERA_MODULE_EEPROM);//fihtdc,derekcwwu add
-		pr_info("%s:%d memory map Size: %d\n", __func__, __LINE__, eeprom_map->memory_map_size); /* MM-JF-implement-dual-cam-recalibration-00+{ */
+		pr_info("%s:%d Memory map Size: %d\n", __func__, __LINE__, eeprom_map->memory_map_size); /* MM-JF-implement-dual-cam-recalibration-00+{ */
 		if (eeprom_map->memory_map_size < write_table_threshold) // normal case
 		{
 			for (i = 0; i < eeprom_map->memory_map_size; i++) {
@@ -420,20 +419,11 @@ static int eeprom_parse_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 eeprom_init_retry:
 					e_ctrl->i2c_client.addr_type =
 						eeprom_map->mem_settings[i].addr_type;
-					if (eeprom_map->mem_settings[i].data_type == MSM_CAMERA_I2C_WORD_DATA) {
-						rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_read(
-							&(e_ctrl->i2c_client),
-							eeprom_map->mem_settings[i].reg_addr,
-							(uint16_t *)memptr,
-							eeprom_map->mem_settings[i].data_type);
-					} else {
-						rc = e_ctrl->i2c_client.i2c_func_tbl->
-							i2c_read_seq(&(e_ctrl->i2c_client),
-							eeprom_map->mem_settings[i].reg_addr,
-							memptr,
-							eeprom_map->mem_settings[i].reg_data);
-					}
-
+					rc = e_ctrl->i2c_client.i2c_func_tbl->
+						i2c_read_seq(&(e_ctrl->i2c_client),
+						eeprom_map->mem_settings[i].reg_addr,
+						memptr,
+						eeprom_map->mem_settings[i].reg_data);
 					msleep(eeprom_map->mem_settings[i].delay);
 #if FIH_CAMERA_BBS_DEBUG
 					fih_camera_bbs_by_cci(e_ctrl->i2c_client.cci_client->cci_i2c_master,
@@ -467,12 +457,8 @@ eeprom_init_retry:
 				case MSM_CAM_WRITE: {
 					e_ctrl->i2c_client.addr_type =
 						eeprom_map->mem_settings[i].addr_type;
-					if (addr == 0x0){
-						addr = eeprom_map->mem_settings[i].reg_addr;
-						pr_err("%s: addr = 0x%x\n", __func__, addr);
-					}
+					if (addr == 0x0) addr = eeprom_map->mem_settings[i].reg_addr;
 					data[num_byte] = eeprom_map->mem_settings[i].reg_data;
-					pr_err("%s: data[%d] = 0x%x\n", __func__, num_byte, data[num_byte]);
 					num_byte++;
 					if (i+1 < eeprom_map->memory_map_size && (addr+num_byte-1)%reg_setting_max_size != (reg_setting_max_size-1))
 					{
@@ -481,11 +467,11 @@ eeprom_init_retry:
 							&& num_byte < reg_setting_max_size)
 							continue;
 					}
-					rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write_seq(
+					/*rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write_seq(
 						&(e_ctrl->i2c_client),
 						addr,
 						data,
-						num_byte);
+						num_byte);*/
 					msleep(1);
 					addr = 0x0;
 					num_byte = 0;
@@ -516,19 +502,11 @@ eeprom_init_retry:
 eeprom_init_retry_recal:
 					e_ctrl->i2c_client.addr_type =
 						eeprom_map->mem_settings[i].addr_type;
-					if (eeprom_map->mem_settings[i].data_type == MSM_CAMERA_I2C_WORD_DATA) {
-						rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_read(
-							&(e_ctrl->i2c_client),
-							eeprom_map->mem_settings[i].reg_addr,
-							(uint16_t *)memptr,
-							eeprom_map->mem_settings[i].data_type);
-					} else {
-						rc = e_ctrl->i2c_client.i2c_func_tbl->
-							i2c_read_seq(&(e_ctrl->i2c_client),
-							eeprom_map->mem_settings[i].reg_addr,
-							memptr,
-							eeprom_map->mem_settings[i].reg_data);
-					}
+					rc = e_ctrl->i2c_client.i2c_func_tbl->
+						i2c_read_seq(&(e_ctrl->i2c_client),
+						eeprom_map->mem_settings[i].reg_addr,
+						memptr,
+						eeprom_map->mem_settings[i].reg_data);
 					msleep(eeprom_map->mem_settings[i].delay);
 					if (rc < 0) {
 						eeprom_init_retry_cnt++;

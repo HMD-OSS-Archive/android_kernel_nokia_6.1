@@ -67,13 +67,6 @@
 #define HLT_ID    1
 #define OFILM_ID  2
 
-enum {
-    DEV_DRG_HLT13 = 0,
-    DEV_DRG_HLT14,
-    DEV_CTL_HLT13,
-    DEV_CTL_HLT14
-};
-
 struct goodix_point_t {
     int id;
     int x;
@@ -172,7 +165,6 @@ struct goodix_ts_data {
     struct goodix_fw_info fw_info;
     bool force_update;
     bool init_done;
-    unsigned long timestamp;
 };
 
 /************************* PART2:TODO define *******************************/

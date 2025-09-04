@@ -626,13 +626,6 @@ struct mdss_dsi_ctrl_pdata {
 
 	struct dsi_panel_cmds glance_mode_off_cmds;	//SW4-HL-Display-ForceLeaveGlanceModeIfPowerStatusIs0xDC-00+_20170822
 
-	//SW4-HL-Display-C1NO-3148-00+{_20180508
-	struct dsi_panel_cmds mipi_term_resistor_04h_cmds;
-	struct dsi_panel_cmds mipi_term_resistor_14h_cmds;
-	struct dsi_panel_cmds mipi_term_resistor_24h_cmds;		
-	struct dsi_panel_cmds mipi_term_resistor_34h_cmds;	
-	//SW4-HL-Display-C1NO-3148-00+}_20180508
-
 	char pps_buf[DSC_PPS_LEN];	/* dsc pps */
 
 	struct dcs_cmd_list cmdlist;
@@ -713,10 +706,6 @@ struct mdss_dsi_ctrl_pdata {
 	bool update_phy_timing; /* flag to recalculate PHY timings */
 
 	bool phy_power_off;
- #if defined(CONFIG_PXLW_IRIS3)
-	bool interleave_op_contention;
-	bool bta_error;
- #endif
 	bool esd_need_reset;
 };
 

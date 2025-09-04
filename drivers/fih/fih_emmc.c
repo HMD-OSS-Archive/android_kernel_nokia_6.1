@@ -3,38 +3,13 @@
 #include <linux/string.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
-#include <linux/io.h>
 #include "fih_emmc.h"
-#include "fih_ramtable.h"
 
 #define FIH_PROC_DIR   "AllHWList"
 #define FIH_PROC_PATH  "AllHWList/emmcinfo"
 #define FIH_PROC_SIZE  FIH_EMMC_SIZE
 
-#define FIH_EMMC_DR52  0x44523532  //DR52
-#define FIH_EMMC_HS20  0x48533230  //HS20
-#define FIH_EMMC_HS40  0x48533430  //HS40
-static unsigned int emmc_ramtable_addr = (FIH_MEM_MEM_ADDR+0x18);
-static unsigned int emmc_ramtable_size = 4;
-
 static char fih_proc_data[FIH_PROC_SIZE] = "unknown";
-
-static int fih_emmc_bbs(void)
-{
-  int *buf = (int *)ioremap(emmc_ramtable_addr, emmc_ramtable_size);
-
-	if (buf == NULL) {
-		return 0;
-	}
-
-  if(*buf == FIH_EMMC_DR52)
-  {
-    printk ("BBox::UEC;6::5\n");
-  }
-  iounmap(buf);
-
-  return 0;
-}
 
 void fih_emmc_setup(char *info)
 {
@@ -62,8 +37,6 @@ static struct file_operations emmcinfo_file_ops = {
 
 static int __init fih_proc_init(void)
 {
-  fih_emmc_bbs(); //Check t BBS
-
 	if (proc_create(FIH_PROC_PATH, 0, NULL, &emmcinfo_file_ops) == NULL)
         {
                 proc_mkdir(FIH_PROC_DIR, NULL);

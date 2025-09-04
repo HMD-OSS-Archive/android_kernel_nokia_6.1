@@ -4,7 +4,6 @@
 		qcom,batt-id-range-pct = <15>;
 		#include "fg-gen3-batterydata-ALT-3000mah-100k-DRG.dtsi"
 		#include "fg-gen3-batterydata-coslight-3000mah-200k-DRG.dtsi"
-		#include "fg-gen3-batterydata-McNair-3000mah-300k-DRG.dtsi"
 	};
 };
 

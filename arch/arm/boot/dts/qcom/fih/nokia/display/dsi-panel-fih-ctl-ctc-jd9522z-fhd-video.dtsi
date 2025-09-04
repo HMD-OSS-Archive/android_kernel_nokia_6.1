@@ -23,17 +23,16 @@
 		qcom,mdss-dsi-panel-type = "dsi_video_mode";
 		qcom,mdss-dsi-panel-destination = "display_1";
 		qcom,mdss-dsi-panel-framerate = <60>;
-		//qcom,mdss-dsi-panel-clockrate = <998400000>;
 		qcom,mdss-dsi-virtual-channel-id = <0>;
 		qcom,mdss-dsi-stream = <0>;
 		qcom,mdss-dsi-panel-width = <1080>;
 		qcom,mdss-dsi-panel-height = <2280>;
-		qcom,mdss-dsi-h-front-porch = <112>;
-		qcom,mdss-dsi-h-back-porch = <12>;
-		qcom,mdss-dsi-h-pulse-width = <84>;
+		qcom,mdss-dsi-h-front-porch = <32>;
+                qcom,mdss-dsi-h-back-porch = <46>;
+		qcom,mdss-dsi-h-pulse-width = <2>;
 		qcom,mdss-dsi-h-sync-skew = <0>;
+		qcom,mdss-dsi-v-front-porch = <16>;
 		qcom,mdss-dsi-v-back-porch = <16>;
-		qcom,mdss-dsi-v-front-porch = <20>;
 		qcom,mdss-dsi-v-pulse-width = <2>;
 		qcom,mdss-dsi-h-left-border = <0>;
 		qcom,mdss-dsi-h-right-border = <0>;
@@ -46,19 +45,13 @@
 		
 		qcom,mdss-dsi-on-command = [
 			/* HDR PX8418 Bypass Code -- START  */
-			//29 01 00 00 01 00 14 f4 ff ff ff 04 00 c0 f0 01 00 00 00 00 00 c0 f0 39 c1 01 02
-			//29 01 00 00 0a 00 14 f4 ff ff ff 68 00 00 f0 02 00 00 00 68 00 00 f0 00 00 00 00
+			29 01 00 00 01 00 14 f4 ff ff ff 04 00 c0 f0 01 00 00 00 00 00 c0 f0 39 c1 01 02
+			29 01 00 00 0a 00 14 f4 ff ff ff 68 00 00 f0 02 00 00 00 68 00 00 f0 00 00 00 00			
 			/* HDR PX8418 Bypass Code -- END  */			
                         39 01 00 00 00 00 04 DF 95 22 B7
                         39 01 00 00 1E 00 02 DE 00
                         05 01 00 00 96 00 02 11 00
 			05 01 00 00 00 00 02 29 00
-			
-			39 01 00 00 00 00 04 DF 95 22 B7
-			39 01 00 00 00 00 09 D5 00 00 00 00 00 02 00 00
-			39 01 00 00 00 00 21 D4 01 18 E8 15 0F 00 01 02 06 46 37 87 30 01 02 01 49 70 10 06 46 06 02 00 00 04 00 00 00 06 02 02
-			39 01 00 00 00 00 17 C3 2C 04 04 04 04 07 19 1D 2F 33 45 02 03 03 03 03 04 00 01 01 04 47			
-			
                         05 01 00 00 00 00 02 35 00
                         39 01 00 00 00 00 03 51 3F FF
                         15 01 00 00 00 00 02 53 2C
@@ -82,8 +75,8 @@
 		qcom,mdss-dsi-lane-1-state;
 		qcom,mdss-dsi-lane-2-state;
 		qcom,mdss-dsi-lane-3-state;
-		qcom,mdss-dsi-t-clk-post = <0x0F>;
-		qcom,mdss-dsi-t-clk-pre = <0x36>;
+		qcom,mdss-dsi-t-clk-post = <0x0D>;
+		qcom,mdss-dsi-t-clk-pre = <0x32>;
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-reset-sequence = <1 10>, <0 5>, <1 15>;
@@ -93,7 +86,7 @@
 		qcom,mdss-pan-physical-width-dimension-full = <6350>;
 		qcom,mdss-pan-physical-height-dimension-full = <13406>;
 
-		//qcom,suspend-ulps-enabled;
+		qcom,suspend-ulps-enabled;
 		
 		/* SW4-HL-Display-EliminateMostDsiError-00+{_20170216 */
 		qcom,mdss-dsi-tx-eot-append;
@@ -110,7 +103,7 @@
 		/* TBD */
 		/* B2N - gatycclu - Enable ESD check */
 		/* 
-		//qcom,esd-check-enabled;
+		qcom,esd-check-enabled;
 		qcom,mdss-dsi-panel-status-check-mode = "reg_read";
 		qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 0a
 			06 01 00 01 00 00 01 0d
@@ -165,22 +158,17 @@
 		qcom,mdss-dsi-cabc-still-command-BeforeInit-state = "dsi_lp_mode";
 		qcom,mdss-dsi-cabc-moving-command-BeforeInit-state = "dsi_lp_mode";
 
-		qcom,mdss-dsi-panel-hdr-enabled;
-		qcom,mdss-dsi-panel-hdr-color-primaries = <14500 15500 32000 17000 15500 30000 8000 3000>;
-		qcom,mdss-dsi-panel-peak-brightness = <3500000>;
-		qcom,mdss-dsi-panel-blackness-level = <30>;
-
 		//fih,default-cabc-mode = <2>;
 	};
 };
 
-&fih_dsi_ctl_ctc_jd9522z_fhd_video  {
+&fih_dsi_ctl_ctc_jd9522z_fhd_video {
 	qcom,mdss-dsi-panel-timings-phy-v2 = [
-		  26 21 09 0a 06 03 04 a0
-		  26 21 09 0a 06 03 04 a0
-		  26 21 09 0a 06 03 04 a0
-		  26 21 09 0a 06 03 04 a0
-		  26 20 09 0b 06 03 04 a0
+                25 1F 09 0A 06 03 04 a0
+                25 1F 09 0A 06 03 04 a0
+                25 1F 09 0A 06 03 04 a0
+                25 1F 09 0A 06 03 04 a0
+                25 1F 09 0A 06 03 04 a0
 	];
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
 	qcom,mdss-dsi-bl-min-level = <1>;
@@ -216,7 +204,6 @@
 	px8418,reset-gpio = <&tlmm 48 0>;
 	px8418,wakeup-gpio = <&tlmm 50 0>;
 	px8418,1p8-en-gpio = <&tlmm 35 0>;	
-	px8418,fs-curr-ua = <25000>;	
 };
 
 &soc {

@@ -47,16 +47,12 @@
 #include "touch/touch-gt915l-ctc-ctl.dtsi"
 
 /* LCM */
-/* SW4-HL-Display-CTL-JD9522Z-BringUp-00+{_20180417 */
+/* SW4-HL-Display-BringUpCTCOTM1911A-00*_20180116 */
+#include "display/dsi-panel-fih-ctc-otm1911a-fhd-video.dtsi"
+/* SW4-HL-Display-OTM1911A-AUO-BringUp-00+_20180221 */
+#include "display/dsi-panel-fih-auo-otm1911a-fhd-video.dtsi"
+/* SW4-HL-Display-CTL-GT915L-CTC_n_AUO-BringUp-00+_20180226 */
 #include "display/dsi-panel-fih-ctl-ctc-otm1911a-fhd-video.dtsi"
-#include "display/dsi-panel-fih-ctl-auo-otm1911a-fhd-video.dtsi"
-#include "display/dsi-panel-fih-ctl-ctc-jd9522z-fhd-video.dtsi"
-/* SW4-HL-Display-CTL-JD9522Z-BringUp-00+}_20180417 */
-
-/* HDR */
-#include "display/pxlw-iris3-cfg-fih-ctl-ctc-otm1911a-fhd-video.dtsi"
-#include "display/pxlw-iris3-cfg-fih-ctl-ctc-jd9522z-fhd-video.dtsi"
-
 
 /* NFC */
 /* Samsung */

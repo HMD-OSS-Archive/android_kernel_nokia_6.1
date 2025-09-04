@@ -691,6 +691,9 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 
 		mbhc->hph_type = WCD_MBHC_HPH_NONE;
 		mbhc->zl = mbhc->zr = 0;
+		//Add prevent portable speaker detection abnormal -- st.
+		mbhc->force_linein = false;
+		//Add prevent portable speaker detection abnormal -- ed.
 		pr_debug("%s: Reporting removal %d(%x)\n", __func__,
 			 jack_type, mbhc->hph_status);
 		wcd_mbhc_jack_report(mbhc, &mbhc->headset_jack,
@@ -699,6 +702,7 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 		hphrocp_off_report(mbhc, SND_JACK_OC_HPHR);
 		hphlocp_off_report(mbhc, SND_JACK_OC_HPHL);
 		mbhc->current_plug = MBHC_PLUG_TYPE_NONE;
+		mbhc->force_linein = false;
 	} else {
 		/*
 		 * Report removal of current jack type.
@@ -735,6 +739,10 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 			wcd_mbhc_jack_report(mbhc, &mbhc->headset_jack,
 					    0, WCD_MBHC_JACK_MASK);
 
+      //Add prevent portable speaker detection abnormal -- st.
+      mbhc->force_linein = false; 
+      //Add prevent portable speaker detection abnormal -- ed.
+
 			if (mbhc->hph_status == SND_JACK_LINEOUT) {
 
 				pr_debug("%s: Enable micbias\n", __func__);
@@ -754,6 +762,7 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 						SND_JACK_LINEOUT |
 						SND_JACK_ANC_HEADPHONE |
 						SND_JACK_UNSUPPORTED);
+			mbhc->force_linein = false;
 		}
 
 		if (mbhc->current_plug == MBHC_PLUG_TYPE_HEADSET &&
@@ -788,7 +797,11 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 				 mbhc->zr < MAX_IMPED) &&
 				(jack_type == SND_JACK_HEADPHONE)) {
 				jack_type = SND_JACK_LINEOUT;
+				mbhc->force_linein = true;
 				mbhc->current_plug = MBHC_PLUG_TYPE_HIGH_HPH;
+				//Add prevent portable speaker detection abnormal -- st.
+				mbhc->force_linein = true; 
+				//Add prevent portable speaker detection abnormal -- ed.
 				if (mbhc->hph_status) {
 					mbhc->hph_status &= ~(SND_JACK_HEADSET |
 							SND_JACK_LINEOUT |
@@ -1030,55 +1043,56 @@ exit:
 /* To determine if cross connection occured */
 static int wcd_check_cross_conn(struct wcd_mbhc *mbhc)
 {
-	u16 swap_res = 0;
-	enum wcd_mbhc_plug_type plug_type = MBHC_PLUG_TYPE_NONE;
-	s16 reg1 = 0;
-	bool hphl_sch_res = 0, hphr_sch_res = 0;
-
-	if (wcd_swch_level_remove(mbhc)) {
-		pr_debug("%s: Switch level is low\n", __func__);
-		return -EINVAL;
-	}
-
-	/* If PA is enabled, dont check for cross-connection */
-	if (mbhc->mbhc_cb->hph_pa_on_status)
-		if (mbhc->mbhc_cb->hph_pa_on_status(mbhc->codec))
-			return false;
-
-	WCD_MBHC_REG_READ(WCD_MBHC_ELECT_SCHMT_ISRC, reg1);
-	/*
-	 * Check if there is any cross connection,
-	 * Micbias and schmitt trigger (HPHL-HPHR)
-	 * needs to be enabled. For some codecs like wcd9335,
-	 * pull-up will already be enabled when this function
-	 * is called for cross-connection identification. No
-	 * need to enable micbias in that case.
-	 */
-	wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
-	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, 2);
-
-	WCD_MBHC_REG_READ(WCD_MBHC_ELECT_RESULT, swap_res);
-	pr_debug("%s: swap_res%x\n", __func__, swap_res);
-
-	/*
-	 * Read reg hphl and hphr schmitt result with cross connection
-	 * bit. These bits will both be "0" in case of cross connection
-	 * otherwise, they stay at 1
-	 */
-	WCD_MBHC_REG_READ(WCD_MBHC_HPHL_SCHMT_RESULT, hphl_sch_res);
-	WCD_MBHC_REG_READ(WCD_MBHC_HPHR_SCHMT_RESULT, hphr_sch_res);
-	if (!(hphl_sch_res || hphr_sch_res)) {
-		plug_type = MBHC_PLUG_TYPE_GND_MIC_SWAP;
-		pr_debug("%s: Cross connection identified\n", __func__);
-	} else {
-		pr_debug("%s: No Cross connection found\n", __func__);
-	}
-
-	/* Disable schmitt trigger and restore micbias */
-	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, reg1);
-	pr_debug("%s: leave, plug type: %d\n", __func__,  plug_type);
-
-	return (plug_type == MBHC_PLUG_TYPE_GND_MIC_SWAP) ? true : false;
+    return false;
+//	u16 swap_res = 0;
+//	enum wcd_mbhc_plug_type plug_type = MBHC_PLUG_TYPE_NONE;
+//	s16 reg1 = 0;
+//	bool hphl_sch_res = 0, hphr_sch_res = 0;
+//
+//	if (wcd_swch_level_remove(mbhc)) {
+//		pr_debug("%s: Switch level is low\n", __func__);
+//		return -EINVAL;
+//	}
+//
+//	/* If PA is enabled, dont check for cross-connection */
+//	if (mbhc->mbhc_cb->hph_pa_on_status)
+//		if (mbhc->mbhc_cb->hph_pa_on_status(mbhc->codec))
+//			return false;
+//
+//	WCD_MBHC_REG_READ(WCD_MBHC_ELECT_SCHMT_ISRC, reg1);
+//	/*
+//	 * Check if there is any cross connection,
+//	 * Micbias and schmitt trigger (HPHL-HPHR)
+//	 * needs to be enabled. For some codecs like wcd9335,
+//	 * pull-up will already be enabled when this function
+//	 * is called for cross-connection identification. No
+//	 * need to enable micbias in that case.
+//	 */
+//	wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
+//	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, 2);
+//
+//	WCD_MBHC_REG_READ(WCD_MBHC_ELECT_RESULT, swap_res);
+//	pr_debug("%s: swap_res%x\n", __func__, swap_res);
+//
+//	/*
+//	 * Read reg hphl and hphr schmitt result with cross connection
+//	 * bit. These bits will both be "0" in case of cross connection
+//	 * otherwise, they stay at 1
+//	 */
+//	WCD_MBHC_REG_READ(WCD_MBHC_HPHL_SCHMT_RESULT, hphl_sch_res);
+//	WCD_MBHC_REG_READ(WCD_MBHC_HPHR_SCHMT_RESULT, hphr_sch_res);
+//	if (!(hphl_sch_res || hphr_sch_res)) {
+//		plug_type = MBHC_PLUG_TYPE_GND_MIC_SWAP;
+//		pr_debug("%s: Cross connection identified\n", __func__);
+//	} else {
+//		pr_debug("%s: No Cross connection found\n", __func__);
+//	}
+//
+//	/* Disable schmitt trigger and restore micbias */
+//	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, reg1);
+//	pr_debug("%s: leave, plug type: %d\n", __func__,  plug_type);
+//
+//	return (plug_type == MBHC_PLUG_TYPE_GND_MIC_SWAP) ? true : false;
 }
 
 static bool wcd_is_special_headset(struct wcd_mbhc *mbhc)
@@ -1533,7 +1547,19 @@ correct_plug_type:
 	if (!wrk_complete && mbhc->btn_press_intr) {
 		pr_debug("%s: Can be slow insertion of headphone\n", __func__);
 		wcd_cancel_btn_work(mbhc);
-		plug_type = MBHC_PLUG_TYPE_HEADPHONE;
+
+    //Add prevent portable speaker detection abnormal -- st.
+			if (mbhc->force_linein) { 
+     	    plug_type = MBHC_PLUG_TYPE_HIGH_HPH; 
+     	    goto exit; 
+     	} 
+    //Add prevent portable speaker detection abnormal -- ed.
+
+		/* Report as headphone only if previously
+		 * not reported as lineout
+		 */
+		if (!mbhc->force_linein)
+			plug_type = MBHC_PLUG_TYPE_HEADPHONE;
 	}
 	/*
 	 * If plug_tye is headset, we might have already reported either in
@@ -2357,10 +2383,8 @@ static int wcd_mbhc_initialise(struct wcd_mbhc *mbhc)
 		/* Insertion debounce set to 48ms */
 		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_INSREM_DBNC, 4);
 	} else {
-	        //fihtdc, 20180517 Dennis, add for customized debounce
-	        if(mbhc->mbhc_cfg->fih_debounce == 0)
-			mbhc->mbhc_cfg->fih_debounce = 6;
-		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_INSREM_DBNC, mbhc->mbhc_cfg->fih_debounce);
+		/* Insertion debounce set to 96ms */
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_INSREM_DBNC, 6);
 	}
 
 	/* Button Debounce set to 16ms */
@@ -2733,7 +2757,6 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc, struct wcd_mbhc_config *mbhc_cfg)
 	struct snd_soc_codec *codec;
 	struct snd_soc_card *card;
 	const char *usb_c_dt = "qcom,msm-mbhc-usbc-audio-supported";
-	const char *customized_debounce_dt = "fih,fih-mbhc-customized-debounce-supported";
 
 	if (!mbhc || !mbhc_cfg)
 		return -EINVAL;
@@ -2753,20 +2776,12 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc, struct wcd_mbhc_config *mbhc_cfg)
 		rc = of_property_read_u32(card->dev->of_node, usb_c_dt,
 				&mbhc_cfg->enable_usbc_analog);
 	}
-
 	if (mbhc_cfg->enable_usbc_analog == 0 || rc != 0) {
 		dev_info(card->dev,
 				"%s: %s in dt node is missing or false\n",
 				__func__, usb_c_dt);
 		dev_info(card->dev,
 			"%s: skipping USB c analog configuration\n", __func__);
-	}
-
-	// fih, 20180517 Dennis, check if use customized debounce on device tree
-	mbhc_cfg->fih_debounce = 0;
-	if (of_find_property(card->dev->of_node, customized_debounce_dt, NULL)) {
-		rc = of_property_read_u32(card->dev->of_node, customized_debounce_dt,
-				&mbhc_cfg->fih_debounce);
 	}
 
 	/* initialize GPIOs */

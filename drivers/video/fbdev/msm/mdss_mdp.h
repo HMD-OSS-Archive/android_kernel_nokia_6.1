@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -86,7 +86,7 @@
 
 #define XIN_HALT_TIMEOUT_US	0x4000
 
-#define MAX_LAYER_COUNT		0xD
+#define MAX_LAYER_COUNT		0xC
 
 /* For SRC QSEED3, when user space does not send the scaler information,
  * this flag allows pixel _extension to be programmed when scaler is disabled
@@ -275,9 +275,6 @@ enum mdss_mdp_csc_type {
 	MDSS_MDP_CSC_RGB2YUV_2020FR,
 	MDSS_MDP_CSC_YUV2YUV,
 	MDSS_MDP_CSC_RGB2RGB,
-#if defined(CONFIG_PXLW_IRIS3)
-	MDSS_MDP_CSC_YCoCg,
-#endif
 	MDSS_MDP_MAX_CSC
 };
 
@@ -1765,7 +1762,7 @@ int mdss_mdp_ctl_start(struct mdss_mdp_ctl *ctl, bool handoff);
 int mdss_mdp_ctl_stop(struct mdss_mdp_ctl *ctl, int panel_power_mode);
 int mdss_mdp_ctl_intf_event(struct mdss_mdp_ctl *ctl, int event, void *arg,
 	u32 flags);
-int mdss_mdp_get_prefetch_lines(struct mdss_panel_info *pinfo, bool is_fixed);
+int mdss_mdp_get_prefetch_lines(struct mdss_panel_info *pinfo);
 int mdss_mdp_perf_bw_check(struct mdss_mdp_ctl *ctl,
 		struct mdss_mdp_pipe **left_plist, int left_cnt,
 		struct mdss_mdp_pipe **right_plist, int right_cnt);
@@ -1842,9 +1839,6 @@ int mdss_mdp_pipe_sspp_setup(struct mdss_mdp_pipe *pipe, u32 *op);
 int mdss_mdp_pp_sspp_config(struct mdss_mdp_pipe *pipe);
 int mdss_mdp_copy_layer_pp_info(struct mdp_input_layer *layer);
 void mdss_mdp_free_layer_pp_info(struct mdp_input_layer *layer);
-#if defined(CONFIG_PXLW_IRIS3)
-void mdss_mdp_sspp_csc_reset(struct mdss_mdp_pipe *pipe);
-#endif
 
 int mdss_mdp_smp_setup(struct mdss_data_type *mdata, u32 cnt, u32 size);
 

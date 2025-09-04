@@ -1679,19 +1679,15 @@ end:
   mm_segment_t oldfs = get_fs();
   loff_t pos = 0;
   int len = 0;
-  int retry = 0;
-
+  
+  
   dev_dbg(pTAS2557->dev, "%s:\n", __func__);
   
   set_fs(KERNEL_DS);
-  do
-  {
 	//fp = filp_open(fih_e2p_file, O_RDWR |O_NONBLOCK, 0);
 	fp = filp_open(fih_e2p_file, O_RDONLY |O_NONBLOCK, 0);
-	msleep(50);
-	retry++;
-  }while(IS_ERR(fp)&&(retry<40));
-	dev_info(pTAS2557->dev, "%s:retry(%d)\n", __func__,retry);
+	
+	
 	if (IS_ERR(fp)) {
 		dev_err(pTAS2557->dev, "Open file %s Error\r\n", fih_e2p_file);
 		set_fs(oldfs);

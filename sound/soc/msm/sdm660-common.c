@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2572,9 +2572,10 @@ void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 			pr_debug("%s: sleep Tertiary MI2S gpios\n", __func__);
 		}
 		ret = msm_mi2s_set_sclk(substream, false);
-		if (ret < 0)
+		if (ret < 0) {
 			pr_err("%s:clock disable failed for MI2S (%d); ret=%d\n",
 				__func__, index, ret);
+		}
 		if (mi2s_intf_conf[index].msm_is_ext_mclk) {
 			mi2s_mclk[index].enable = 0;
 			pr_debug("%s: Disabling mclk, clk_freq_in_hz = %u\n",

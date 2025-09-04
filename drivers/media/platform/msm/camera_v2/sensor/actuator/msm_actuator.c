@@ -374,7 +374,6 @@ static int32_t msm_actuator_init_focus(struct msm_actuator_ctrl_t *a_ctrl,
 {
 	int32_t rc = -EFAULT;
 	int32_t i = 0;
-	uint16_t val=0, reg_data = 0;///fihtdc@20180529, peter add
 	enum msm_camera_i2c_reg_addr_type save_addr_type;
 	CDBG("Enter\n");
 
@@ -415,56 +414,6 @@ static int32_t msm_actuator_init_focus(struct msm_actuator_ctrl_t *a_ctrl,
 				settings[i].data_type,
 				settings[i].delay);
 			break;
-		///fihtdc@20180529, peter add +++
-		case MSM_ACT_FIH_READ_AND_TO_WRITE:
-			rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_read(
-				&a_ctrl->i2c_client,
-				settings[i].reg_addr,
-				&reg_data,
-				settings[i].data_type);
-				val=reg_data;
-				reg_data = (reg_data & settings[i].reg_data);
-			if( rc < 0 ){
-				pr_err("MSM_ACT_FIH_READ_AND_TO_WRITE: read 0x%x fail\n", settings[i].reg_addr);
-			}else{
-				CDBG("MSM_ACT_FIH_READ_AND_TO_WRITE: addr=0x%x, orig=%d, AND=%d, new=%d\n", settings[i].reg_addr, val, settings[i].reg_data, reg_data);
-				rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_write(
-					&a_ctrl->i2c_client,
-					settings[i].reg_addr,
-					reg_data,
-					settings[i].data_type);
-				if (settings[i].delay > 20)
-					msleep(settings[i].delay);
-				else if (0 != settings[i].delay)
-					usleep_range(settings[i].delay * 1000,
-						(settings[i].delay * 1000) + 1000);
-			}
-			break;
-		case MSM_ACT_FIH_READ_OR_TO_WRITE:
-			rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_read(
-				&a_ctrl->i2c_client,
-				settings[i].reg_addr,
-				&reg_data,
-				settings[i].data_type);
-				val=reg_data;
-				reg_data = (reg_data | settings[i].reg_data);
-			if( rc < 0 ){
-				pr_err("MSM_ACT_FIH_READ_OR_TO_WRITE: read 0x%x fail\n", settings[i].reg_addr);
-			}else{
-				CDBG("MSM_ACT_FIH_READ_OR_TO_WRITE: addr=0x%x, orig=%d, OR=%d, new=%d\n", settings[i].reg_addr, val, settings[i].reg_data, reg_data);
-				rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_write(
-					&a_ctrl->i2c_client,
-					settings[i].reg_addr,
-					reg_data,
-					settings[i].data_type);
-				if (settings[i].delay > 20)
-					msleep(settings[i].delay);
-				else if (0 != settings[i].delay)
-					usleep_range(settings[i].delay * 1000,
-						(settings[i].delay * 1000) + 1000);
-			}
-			break;
-		///fihtdc@20180529, peter add ---
 		default:
 			pr_err("Unsupport i2c_operation: %d\n",
 				settings[i].i2c_operation);
@@ -644,11 +593,6 @@ static int32_t msm_actuator_move_focus(
 	struct msm_camera_i2c_reg_setting reg_setting;
 
 	CDBG("called, dir %d, num_steps %d\n", dir, num_steps);
-
-	if (a_ctrl->step_position_table == NULL) {
-		pr_err("Step Position Table is NULL\n");
-		return -EINVAL;
-	}
 
 	if ((dest_step_pos == a_ctrl->curr_step_pos) ||
 		((dest_step_pos <= a_ctrl->total_steps) &&
@@ -1660,13 +1604,6 @@ static int msm_actuator_close(struct v4l2_subdev *sd,
 	}
 	kfree(a_ctrl->i2c_reg_tbl);
 	a_ctrl->i2c_reg_tbl = NULL;
-	if (a_ctrl->actuator_state == ACT_OPS_ACTIVE) {
-		rc = msm_actuator_power_down(a_ctrl);
-		if (rc < 0) {
-			pr_err("%s:%d Actuator Power down failed\n",
-				__func__, __LINE__);
-		}
-	}
 	a_ctrl->actuator_state = ACT_DISABLE_STATE;
 	mutex_unlock(a_ctrl->actuator_mutex);
 	CDBG("Exit\n");

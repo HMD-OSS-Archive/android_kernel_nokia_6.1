@@ -397,10 +397,8 @@ static void fts_check_gesture(struct input_dev *input_dev,int gesture_id)
     /* report event key */
     if (gesture ==  KEY_WAKEUP)
     {
-        printk(KERN_ERR "[FTS] %s, key event %d pressed\n", __func__, gesture);
         input_report_key(input_dev, gesture, 1);
         input_sync(input_dev);
-        printk(KERN_ERR "[FTS] %s, key event %d released\n", __func__, gesture);
         input_report_key(input_dev, gesture, 0);
         input_sync(input_dev);
     }
