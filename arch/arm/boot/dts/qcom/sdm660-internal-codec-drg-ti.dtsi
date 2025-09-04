@@ -102,6 +102,10 @@
   "ADC2_IN", "ADC2_OUT",
   "ADC3_IN", "ADC3_OUT";
   fih,ti-tas2557;
+  fih,fih-mbhc-customized-debounce-supported = <9>;
+  fih,msm-hs-v-headset-max = <1700>;
+  fih,msm-btn-vol-thr-low = <100 225 440 440 440>;
+  fih,msm-btn-vol-thr-high = <100 225 440 440 440>;
 };
 
 &pmic_analog_codec {
@@ -110,6 +114,12 @@
 
 &msm_sdw_codec {
   status = "okay";
+};
+
+&pm660l_3 {
+	pmic_analog_codec: analog-codec@f000 {
+		qcom,cdc-micbias-cfilt-mv = <2700000>;
+	};
 };
 
 &soc{

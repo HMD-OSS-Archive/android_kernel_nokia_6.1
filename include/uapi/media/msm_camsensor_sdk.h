@@ -50,6 +50,8 @@
 
 #define MSM_SENSOR_BYPASS_VIDEO_NODE    1
 
+#define FRONT_AUX_SENSOR_SUPPORT
+
 enum msm_sensor_camera_id_t {
 	CAMERA_0,
 	CAMERA_1,
@@ -70,6 +72,7 @@ enum camb_position_t {
 	BACK_CAMERA_B,
 	FRONT_CAMERA_B,
 	AUX_CAMERA_B = 0x100,
+	FRONT_AUX_CAMERA_B,
 	INVALID_CAMERA_B,
 };
 
@@ -174,6 +177,8 @@ enum msm_actuator_write_type {
 enum msm_actuator_i2c_operation {
 	MSM_ACT_WRITE = 0,
 	MSM_ACT_POLL,
+	MSM_ACT_FIH_READ_AND_TO_WRITE, ///fihtdc@20180529, peter add
+	MSM_ACT_FIH_READ_OR_TO_WRITE, ///fihtdc@20180529, peter add
 };
 
 enum actuator_type {
@@ -368,6 +373,7 @@ struct msm_camera_csiphy_params {
 	unsigned char csid_core;
 	unsigned int csiphy_clk;
 	unsigned char csi_3phase;
+	uint64_t data_rate;
 };
 
 struct msm_camera_i2c_seq_reg_array {

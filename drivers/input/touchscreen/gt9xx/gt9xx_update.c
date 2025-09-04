@@ -42,12 +42,12 @@
 #define GOODIX_FIRMWARE_FILE_NAME_HLT_CTL     "goodix_firmware_hlt_ctl.bin"
 #define GOODIX_CONFIG_FILE_NAME_HLT_CTL       "goodix_config_hlt_ctl.cfg"
 
-enum {
-    DEV_DRG_HLT13 = 0,
-    DEV_DRG_HLT14,
-    DEV_CTL_HLT13,
-    DEV_CTL_HLT14
-};
+//enum {
+//    DEV_DRG_HLT13 = 0,
+//    DEV_DRG_HLT14,
+//    DEV_CTL_HLT13,
+//    DEV_CTL_HLT14
+//};
 
 #define FW_HEAD_LENGTH          14
 #define FW_SECTION_LENGTH       0x2000  /*  8K */
@@ -471,11 +471,11 @@ static int gup_update_config(struct i2c_client *client)
         ret = request_firmware(&fw_cfg, GOODIX_CONFIG_FILE_NAME_OFILM,&client->dev);
         pr_info("[FIH@touch] config file - %s \n",GOODIX_CONFIG_FILE_NAME_OFILM);
     }else if(ts->fw_info.sensor_id == HLT_ID){
-        if((ts->pdata->devinfo == DEV_CTL_HLT14) && (buf_a[2] >= 70)){
+        if( ts->pdata->devinfo == DEV_CTL_HLT14 ){
             //CTL device 3 && CFG Version greater than 70
             ret = request_firmware(&fw_cfg, GOODIX_CONFIG_FILE_NAME_HLT_CTL,&client->dev);
             pr_info("[FIH@touch] config file - %s \n",GOODIX_CONFIG_FILE_NAME_HLT_CTL);
-        }else if((ts->pdata->devinfo == DEV_DRG_HLT14) && (buf_a[2] >= 70)){
+        }else if( ts->pdata->devinfo == DEV_DRG_HLT14){
             //DRG device 1 && CFG Version greater than 70
             ret = request_firmware(&fw_cfg, GOODIX_CONFIG_FILE_NAME_HLT,&client->dev);
             pr_info("[FIH@touch] config file - %s \n",GOODIX_CONFIG_FILE_NAME_HLT);
@@ -1665,7 +1665,7 @@ static u8 gup_burn_fw_gwake_section(struct i2c_client *client,
         return FAIL;
     }
     /* must delay */
-    usleep_range(1000, 2000);
+    usleep_range(5000, 6000);
 
     /* step4:select bank */
     ret = gup_set_ic_msg(

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -34,6 +34,10 @@
 #include "mdss_debug.h"
 #include "mdss_dsi_phy.h"
 #include "mdss_dba_utils.h"
+
+#if defined(CONFIG_PXLW_IRIS3)
+#include "mdss_dsi_iris3.h"
+#endif
 
 //SW4-HL-Display-GlanceMode-00+{_20170524
 #ifdef CONFIG_AOD_FEATURE
@@ -108,13 +112,25 @@ EXPORT_SYMBOL(fih_get_blank_mode);
 #endif
 //SW4-HL-Display-GlanceMode-00+}_20170524
 
+//SW4-HL-Display-HDR-Ping-00+{_20180323
+//HDR Ping
+int HDR_enable = 0;
+//extern int gHdrChipId;
+//SW4-HL-Display-HDR-Ping-00+}_20180323
+
 extern void fih_tp_lcm_suspend_lpwg_on(void);	//SW4-HL-Touch-ImplementDoubleTap-00+_20170623
 extern int gdouble_tap_enable;						//SW4-HL-Touch-ImplementDoubleTap-00+_20170623
 extern void hlt_tp_lcm_resume(void);//add by snow
 
-extern int gdouble_tap_enable_gt9xx;	//SW4-HL-TP-DRG_n_CTL-DoubleTap-00+_20180319
-
 extern int gdouble_tap_enable_nvt;	//SW4-HL-TP-B2N-NT36672-DoubleTap-00+_20180302
+
+//SW4-HL-Display-HDR-SetFsCurr-00+{_20180515
+u32 px8418_fs_curr_ua;
+extern int qpnp_wled_fs_curr_ua_set(int data);
+int fs_curr_ua_set;
+int g_fs_curr=0;
+extern int g_wled_fs_curr_ua;
+//SW4-HL-Display-HDR-SetFsCurr-00+}_20180515
 
 void mdss_dump_dsi_debug_bus(u32 bus_dump_flag,
 	u32 **dump_mem)
@@ -461,31 +477,33 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 		//SW4-HL-Display-BringUpCTCOTM1911A-00+{_20180116
 		case FIH_CTC_OTM1911A_FHD_VIDEO_PANEL:
 		case FIH_AUO_OTM1911A_FHD_VIDEO_PANEL:		//SW4-HL-Display-OTM1911A-AUO-BringUp-00+_20180221
-                case FIH_CTC_JD9522Z_FHD_VIDEO_PANEL:           //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
+        case FIH_CTC_JD9522Z_FHD_VIDEO_PANEL:           //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
+                        {
+                                pr_debug("\n\n******************** [HL]%s: DRG All Panels\n", __func__);
+
+				ret = mdss_dsi_panel_reset(pdata, 0);
+				if (ret) {
+						pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+						ret = 0;
+				}
+								
+                                //Follow Spec., RST need delay 120ms
+                                msleep(120);
+                        }
+                        break;
 		case FIH_CTL_CTC_OTM1911A_FHD_VIDEO_PANEL:	//SW4-HL-Display-CTL-GT915L-CTC_n_AUO-BringUp-00+_20180226
                 case FIH_CTL_AUO_OTM1911A_FHD_VIDEO_PANEL:      //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
                 case FIH_CTL_CTC_JD9522Z_FHD_VIDEO_PANEL:       //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
 			{
-                                pr_debug("\n\n******************** [HL]%s: DRG and CTL All Panels\n", __func__);
-				if (!gdouble_tap_enable_gt9xx)	//SW4-HL-TP-DRG_n_CTL-DoubleTap-00*_20180319
-				{
-					pr_debug("\n\n******************** [HL]%s: gdouble_tap_enable_gt9xx is FALSE\n", __func__);
+                                pr_debug("\n\n******************** [HL]%s: CTL All Panels\n", __func__);
+                                ret = mdss_dsi_panel_reset(pdata, 0);
+                                if (ret) {
+                                        pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+                                        ret = 0;
+                                }
 
-					ret = mdss_dsi_panel_reset(pdata, 0);
-					if (ret) {
-						pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
-						ret = 0;
-					}
-				}
-				else
-				{
-					pr_debug("\n\n******************** [HL]%s: gdouble_tap_enable_gt9xx is TRUE\n", __func__);
-
-					//No Nothing
-					pr_debug("\n\n******************** [HL]%s: NOOOOOOOOOOOOOOOOOO Pull LOW LCM Reset Pin\n", __func__);
-				}
-					//Follow Spec., RST need delay 120ms
-					msleep(120);
+                                //Follow Spec., RST need delay 120ms
+                                msleep(120);
 			}
 			break;
 		//SW4-HL-Display-BringUpCTCOTM1911A-00+}_20180116
@@ -524,6 +542,8 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 				pr_debug("********************%s,do nothing about reset**********************\n\n", __func__);
 			}
 			break;
+		case FIH_FT8719_1080P_VIDEO_PANEL:
+			break;
 		//ZZDC sunqiupeng add for bringup PL2 2nd panel@20171226 start
 		case FIH_R69338_1080P_VIDEO_PANEL_PL2:
 			{
@@ -556,6 +576,7 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 			}
 			break;
 		case FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL:
+		case FIH_NT36672_H_GLASS_FHD_CTC_B2N_VIDEO_PANEL:
 			{
 				//SW4-HL-TP-B2N-NT36672-DoubleTap-00*{_20180302
 				pr_debug("\n\n******************** [HL]%s, %d: FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL\n", __func__, __LINE__);
@@ -623,28 +644,17 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 		//SW4-HL-Display-BringUpCTCOTM1911A-00+{_20180116
 		case FIH_CTC_OTM1911A_FHD_VIDEO_PANEL:
 		case FIH_AUO_OTM1911A_FHD_VIDEO_PANEL:	//SW4-HL-Display-OTM1911A-AUO-BringUp-00+_20180221
-                case FIH_CTC_JD9522Z_FHD_VIDEO_PANEL:           //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
+        case FIH_CTC_JD9522Z_FHD_VIDEO_PANEL:           //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
 			{
-                                pr_debug("\n\n******************** [HL]%s: FIH_CTC_OTM1911A_FHD_VIDEO_PANEL OR FIH_AUO_OTM1911A_FHD_VIDEO_PANEL OR FIH_CTC_JD9522Z_FHD_VIDEO_PANEL\n", __func__);
-				if (!gdouble_tap_enable_gt9xx)	//SW4-HL-TP-DRG_n_CTL-DoubleTap-00*_20180319
-				{
-					pr_debug("\n\n******************** [HL]%s: gdouble_tap_enable_gt9xx is FALSE\n", __func__);
+                                pr_debug("\n\n******************** [HL]%s: DRG All Panels\n", __func__);
 
-					/* original qualcomm default */
-					ret = msm_dss_enable_vreg(
-					ctrl_pdata->panel_power_data.vreg_config,
-						ctrl_pdata->panel_power_data.num_vreg, 0);
-					if (ret)
-						pr_err("%s: failed to disable vregs for %s\n",
-							__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
-
-				}
-				else
-				{
-					pr_debug("\n\n******************** [HL]%s: gdouble_tap_enable_gt9xx is TRUE\n", __func__);
-					//Do Nothing
-					pr_debug("\n\n******************** [HL]%s: NOOOOOOOOOOOOOOOOOO Cuf off LCM Powers\n", __func__);
-				}
+				/* original qualcomm default */
+				ret = msm_dss_enable_vreg(
+				ctrl_pdata->panel_power_data.vreg_config,
+					ctrl_pdata->panel_power_data.num_vreg, 0);
+				if (ret)
+					pr_err("%s: failed to disable vregs for %s\n",
+						__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
 			}
 			break;
 		//SW4-HL-Display-BringUpCTCOTM1911A-00+}_20180116
@@ -653,34 +663,22 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
                 case FIH_CTL_AUO_OTM1911A_FHD_VIDEO_PANEL:      //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
                 case FIH_CTL_CTC_JD9522Z_FHD_VIDEO_PANEL:       //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
 			{
-				pr_debug("\n\n******************** [HL]%s: FIH_CTL_CTC_OTM1911A_FHD_VIDEO_PANEL\n", __func__);
-				if (!gdouble_tap_enable_gt9xx)	//SW4-HL-TP-DRG_n_CTL-DoubleTap-00*_20180319
-				{
-					pr_debug("\n\n******************** [HL]%s: gdouble_tap_enable_gt9xx is FALSE\n", __func__);
+                                pr_debug("\n\n******************** [HL]%s: CTL All Panels\n", __func__);
+                                //***********************************************************
+                                //* HDR PX8418 1P8 EN PIN Pull Low
+                                //***********************************************************
+                                pr_debug("\n\n******************** [HL] %s, ctrl_pdata->hdr_1p8_en_gpio = %d	**********************\n\n", __func__, ctrl_pdata->hdr_1p8_en_gpio);
+                                gpio_set_value((ctrl_pdata->hdr_1p8_en_gpio), 0);
+                                gpio_free(ctrl_pdata->hdr_1p8_en_gpio);
+                                pr_debug("\n\n******************** [HL] %s, ctrl_pdata->hdr_1p8_en_gpio = %d	**********************\n\n", __func__, ctrl_pdata->hdr_1p8_en_gpio);
 
-					//***********************************************************
-					//* HDR PX8418 1P8 EN PIN Pull Low
-					//***********************************************************
-					pr_debug("\n\n******************** [HL] %s, ctrl_pdata->hdr_1p8_en_gpio = %d	**********************\n\n", __func__, ctrl_pdata->hdr_1p8_en_gpio);
-					gpio_set_value((ctrl_pdata->hdr_1p8_en_gpio), 0);
-					gpio_free(ctrl_pdata->hdr_1p8_en_gpio);
-					pr_debug("\n\n******************** [HL] %s, ctrl_pdata->hdr_1p8_en_gpio = %d	**********************\n\n", __func__, ctrl_pdata->hdr_1p8_en_gpio);
-
-					/* original qualcomm default */
-					ret = msm_dss_enable_vreg(
-					ctrl_pdata->panel_power_data.vreg_config,
-						ctrl_pdata->panel_power_data.num_vreg, 0);
-					if (ret)
-						pr_err("%s: failed to disable vregs for %s\n",
-							__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
-
-				}
-				else
-				{
-					pr_debug("\n\n******************** [HL]%s: gdouble_tap_enable_gt9xx is TRUE\n", __func__);
-					//Do Nothing
-					pr_debug("\n\n******************** [HL]%s: NOOOOOOOOOOOOOOOOOO Cuf off LCM Powers\n", __func__);
-				}
+                                /* original qualcomm default */
+                                ret = msm_dss_enable_vreg(
+                                ctrl_pdata->panel_power_data.vreg_config,
+                                        ctrl_pdata->panel_power_data.num_vreg, 0);
+                                if (ret)
+                                        pr_err("%s: failed to disable vregs for %s\n",
+                                                __func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
 			}
 			break;		
 		//SW4-HL-Display-CTL-GT915L-CTC_n_AUO-BringUp-00+}_20180226		
@@ -716,6 +714,22 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 			}
 			break;
 		//SW4-JasonSH-Display-BringUpFT8716U-00+}_20170619
+		case FIH_FT8719_1080P_VIDEO_PANEL:
+			{
+				#if 0
+				pr_err("\n\n********************%s, FIH_FT8719_1080P_VIDEO_PANEL **********************\n\n", __func__);
+				if (!gdouble_tap_enable)
+				{
+					udelay(5 * 1000);
+					ret = msm_dss_enable_vreg(ctrl_pdata->panel_power_data.vreg_config, ctrl_pdata->panel_power_data.num_vreg, 0);
+					if (ret)
+						pr_err("%s: failed to disable vregs for %s\n", __func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+				}
+				else
+					pr_debug("********************%s, do nothing about power **********************\n\n", __func__);
+				#endif
+			}
+			break;
 		//ZZDC sunqiupeng add for bringup PL2 2nd panel@20171226 start
 		case FIH_R69338_1080P_VIDEO_PANEL_PL2:
 			{
@@ -787,6 +801,7 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 			}
 			break;
 		case FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL:
+		case FIH_NT36672_H_GLASS_FHD_CTC_B2N_VIDEO_PANEL:
 			//SW4-HL-TP-B2N-NT36672-DoubleTap-00*{_20180302
 			pr_debug("\n\n******************** [HL]%s, %d: FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL\n", __func__, __LINE__);
 			pr_debug("\n\n******************** [HL]%s, %d: gdouble_tap_enable_nvt = %d\n", __func__, __LINE__, gdouble_tap_enable_nvt);
@@ -911,45 +926,20 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 		//SW4-HL-Display-BringUpCTCOTM1911A-00+{_20180116
 		case FIH_CTC_OTM1911A_FHD_VIDEO_PANEL:
 		case FIH_AUO_OTM1911A_FHD_VIDEO_PANEL:	//SW4-HL-Display-OTM1911A-AUO-BringUp-00+_20180221
-                case FIH_CTC_JD9522Z_FHD_VIDEO_PANEL:           //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
+        case FIH_CTC_JD9522Z_FHD_VIDEO_PANEL:           //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
 			{
-                                pr_debug("\n\n******************** [HL]%s: FIH_CTC_OTM1911A_FHD_VIDEO_PANEL OR FIH_AUO_OTM1911A_FHD_VIDEO_PANEL OR FIH_CTC_JD9522Z_FHD_VIDEO_PANEL\n", __func__);
-				if (pdata->panel_info.cont_splash_enabled)
-				{
-					/* original qualcomm default */
-					ret = msm_dss_enable_vreg(
-						ctrl_pdata->panel_power_data.vreg_config,
-						ctrl_pdata->panel_power_data.num_vreg, 1);
-					if (ret) {
-						pr_err("%s: failed to enable vregs for %s\n",
-							__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
-						return ret;
-					}
-				}
-				else
-				{
-					if (!gdouble_tap_enable_gt9xx)	//SW4-HL-TP-DRG_n_CTL-DoubleTap-00*_20180319
-					{
-						pr_debug("\n\n******************** [HL]%s: gdouble_tap_enable_gt9xx is FALSE\n", __func__);
+                                pr_debug("\n\n******************** [HL]%s: DRG All Panels\n", __func__);
 
-						/* original qualcomm default */
-						ret = msm_dss_enable_vreg(
-							ctrl_pdata->panel_power_data.vreg_config,
-							ctrl_pdata->panel_power_data.num_vreg, 1);
-						if (ret) {
-							pr_err("%s: failed to enable vregs for %s\n",
-								__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
-							return ret;
-						}
-					}
-					else
-					{
-						pr_debug("\n\n******************** [HL]%s: gdouble_tap_enable_gt9xx is TRUE\n", __func__);
-
-						//No Nothing
-						pr_debug("\n\n******************** [HL]%s: NOOOOOOOOOOOOOOOOOO Give LCM Powers\n", __func__);
-					}
+				/* original qualcomm default */
+				ret = msm_dss_enable_vreg(
+					ctrl_pdata->panel_power_data.vreg_config,
+					ctrl_pdata->panel_power_data.num_vreg, 1);
+				if (ret) {
+					pr_err("%s: failed to enable vregs for %s\n",
+						__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+					return ret;
 				}
+				
 				//Follow spec., need delay 10ms
 				udelay(10 * 1000);
 			}
@@ -960,73 +950,35 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
                 case FIH_CTL_AUO_OTM1911A_FHD_VIDEO_PANEL:      //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
                 case FIH_CTL_CTC_JD9522Z_FHD_VIDEO_PANEL:       //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
 			{
-				pr_debug("\n\n******************** [HL]%s: FIH_CTL_CTC_OTM1911A_FHD_VIDEO_PANEL\n", __func__);
-				if (pdata->panel_info.cont_splash_enabled)
-				{
-					/* original qualcomm default */
-					ret = msm_dss_enable_vreg(
-						ctrl_pdata->panel_power_data.vreg_config,
-						ctrl_pdata->panel_power_data.num_vreg, 1);
-					if (ret) {
-						pr_err("%s: failed to enable vregs for %s\n",
-							__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
-						return ret;
-					}
+                            pr_debug("\n\n******************** [HL]%s: CTL All Panels\n", __func__);
 
-					//*********************************************************
-					//HDR PX8418 1P8 Enable Pin Pull High
-					//*********************************************************					
-					pr_debug("\n\n******************** [HL] %s, ctrl_pdata->hdr_1p8_en_gpio = %d	**********************\n\n", __func__, ctrl_pdata->hdr_1p8_en_gpio);
-					if (gpio_request(ctrl_pdata->hdr_1p8_en_gpio, "hdr_1p8_en")) {
-						pr_err("%s:request tp hdr_1p8_en gpio failed\n", __func__);
-						//BBOX_LCM_GPIO_FAIL
-						gpio_free(ctrl_pdata->hdr_1p8_en_gpio);
-						return -ENODEV;
-					}
-					gpio_set_value(ctrl_pdata->hdr_1p8_en_gpio, 1);
-					pr_debug("\n\n******************** [HL] %s: gpio_set_value(ctrl_pdata->hdr_1p8_en_gpio, 1) **********************\n\n", __func__);					
-				}
-				else
-				{
-					if (!gdouble_tap_enable_gt9xx)	//SW4-HL-TP-DRG_n_CTL-DoubleTap-00*_20180319
-					{
-						pr_debug("\n\n******************** [HL]%s: gdouble_tap_enable_gt9xx is FALSE\n", __func__);
+                            /* original qualcomm default */
+                            ret = msm_dss_enable_vreg(
+                            ctrl_pdata->panel_power_data.vreg_config,
+                            ctrl_pdata->panel_power_data.num_vreg, 1);
+                            if (ret) {
+                                pr_err("%s: failed to enable vregs for %s\n",
+                                                __func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+                                return ret;
+                            }
 
-						/* original qualcomm default */
-						ret = msm_dss_enable_vreg(
-							ctrl_pdata->panel_power_data.vreg_config,
-							ctrl_pdata->panel_power_data.num_vreg, 1);
-						if (ret) {
-							pr_err("%s: failed to enable vregs for %s\n",
-								__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
-							return ret;
-						}
+                            //SW4-HL-LCM-CTL-OTM1911A-FixNotBeAbleToLightedUpInOS-00+{_20180315
+                            //*********************************************************
+                            //HDR PX8418 1P8 Enable Pin Pull High
+                            //*********************************************************
+                            pr_debug("\n\n******************** [HL] %s, ctrl_pdata->hdr_1p8_en_gpio = %d	**********************\n\n", __func__, ctrl_pdata->hdr_1p8_en_gpio);
+                            if (gpio_request(ctrl_pdata->hdr_1p8_en_gpio, "hdr_1p8_en")) {
+                                    pr_err("%s:request tp hdr_1p8_en gpio failed\n", __func__);
+                                    //BBOX_LCM_GPIO_FAIL
+                                    gpio_free(ctrl_pdata->hdr_1p8_en_gpio);
+                                    return -ENODEV;
+                            }
+                            gpio_set_value(ctrl_pdata->hdr_1p8_en_gpio, 1);
+                            pr_debug("\n\n******************** [HL] %s: gpio_set_value(ctrl_pdata->hdr_1p8_en_gpio, 1) **********************\n\n", __func__);
+                            //SW4-HL-LCM-CTL-OTM1911A-FixNotBeAbleToLightedUpInOS-00+}_20180315
 
-						//SW4-HL-LCM-CTL-OTM1911A-FixNotBeAbleToLightedUpInOS-00+{_20180315
-						//*********************************************************
-						//HDR PX8418 1P8 Enable Pin Pull High
-						//*********************************************************					
-						pr_debug("\n\n******************** [HL] %s, ctrl_pdata->hdr_1p8_en_gpio = %d	**********************\n\n", __func__, ctrl_pdata->hdr_1p8_en_gpio);
-						if (gpio_request(ctrl_pdata->hdr_1p8_en_gpio, "hdr_1p8_en")) {
-							pr_err("%s:request tp hdr_1p8_en gpio failed\n", __func__);
-							//BBOX_LCM_GPIO_FAIL
-							gpio_free(ctrl_pdata->hdr_1p8_en_gpio);
-							return -ENODEV;
-						}
-						gpio_set_value(ctrl_pdata->hdr_1p8_en_gpio, 1);
-						pr_debug("\n\n******************** [HL] %s: gpio_set_value(ctrl_pdata->hdr_1p8_en_gpio, 1) **********************\n\n", __func__);											
-						//SW4-HL-LCM-CTL-OTM1911A-FixNotBeAbleToLightedUpInOS-00+}_20180315
-					}
-					else
-					{
-						pr_debug("\n\n******************** [HL]%s: gdouble_tap_enable_gt9xx is TRUE\n", __func__);
-
-						//No Nothing
-						pr_debug("\n\n******************** [HL]%s: NOOOOOOOOOOOOOOOOOO Give LCM Powers\n", __func__);
-					}
-				}
-				//Follow spec., need delay 10ms
-				udelay(10 * 1000);
+                            //Follow spec., need delay 10ms
+                            udelay(10 * 1000);
 			}
 			break;		
 		//SW4-HL-Display-CTL-GT915L-CTC_n_AUO-BringUp-00+}_20180226			
@@ -1067,6 +1019,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 			break;
 		//SW4-JasonSH-Display-BringUpFT8716U-00+{_20170619
 		case FIH_FT8716U_1080P_CTC_VIDEO_PANEL:
+		case FIH_FT8719_1080P_VIDEO_PANEL:
 			{
 				/*int gpio_status = 0;
 				pr_debug("\n\n******************** [JasonSH] %s, FIH_FT8716U_1080P_CTC_VIDEO_PANEL **********************\n\n", __func__);
@@ -1243,6 +1196,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 			}
 			break;
 		case FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL:
+		case FIH_NT36672_H_GLASS_FHD_CTC_B2N_VIDEO_PANEL:
 			{
 				pr_debug("\n\n******************** [HL]%s, %d: FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL\n", __func__, __LINE__);
 				if (pdata->panel_info.cont_splash_enabled)
@@ -1358,28 +1312,25 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
                         case FIH_CTC_OTM1911A_FHD_VIDEO_PANEL:
                         case FIH_AUO_OTM1911A_FHD_VIDEO_PANEL:		//SW4-HL-Display-OTM1911A-AUO-BringUp-00+_20180221
                         case FIH_CTC_JD9522Z_FHD_VIDEO_PANEL:           //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
+                            {
+					pr_debug("\n\n******************** [HL]%s: DRG All Panels\n", __func__);
+
+					ret = mdss_dsi_panel_reset(pdata, 1);
+					if (ret)
+						pr_err("%s: Panel reset failed. rc=%d\n",
+							__func__, ret);
+                            }
+                            break;
                         case FIH_CTL_CTC_OTM1911A_FHD_VIDEO_PANEL:	//SW4-HL-Display-CTL-GT915L-CTC_n_AUO-BringUp-00+_20180226
                         case FIH_CTL_AUO_OTM1911A_FHD_VIDEO_PANEL:      //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
                         case FIH_CTL_CTC_JD9522Z_FHD_VIDEO_PANEL:       //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
 				{
-                                        pr_debug("\n\n******************** [HL]%s: DRG and CTL All Panels\n", __func__);
-					if (!gdouble_tap_enable_gt9xx)	//SW4-HL-TP-DRG_n_CTL-DoubleTap-00*_20180319
-					{
-						pr_debug("\n\n******************** [HL]%s: gdouble_tap_enable_gt9xx is FALSE\n", __func__);
+                                        pr_debug("\n\n******************** [HL]%s: CTL All Panels\n", __func__);
 
-
-						ret = mdss_dsi_panel_reset(pdata, 1);
-						if (ret)
-							pr_err("%s: Panel reset failed. rc=%d\n",
-									__func__, ret);
-					}
-					else
-					{
-						pr_debug("\n\n******************** [HL]%s: gdouble_tap_enable_gt9xx is TRUE\n", __func__);
-
-						//No Nothing
-						pr_debug("\n\n******************** [HL]%s: NOOOOOOOOOOOOOOOOOO Pull HIGH TP Reset Pin\n", __func__);
-					}
+                                        ret = mdss_dsi_panel_reset(pdata, 1);
+                                        if (ret)
+                                                pr_err("%s: Panel reset failed. rc=%d\n",
+                                                        __func__, ret);
 				}
 				break;
 			//SW4-HL-Display-BringUpCTCOTM1911A-00+}_20180116
@@ -1420,6 +1371,23 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 						udelay(5*1000);
 						gpio_set_value((ctrl_pdata->rst_gpio), 1);
 						gpio_set_value((ctrl_pdata->tp_rst_gpio), 1);
+						pr_debug("********************%s,do something about reset**********************\n\n", __func__);
+					}
+				}
+				break;
+			case FIH_FT8719_1080P_VIDEO_PANEL:
+				{
+					if (!gdouble_tap_enable)
+					{
+						ret = mdss_dsi_panel_reset(pdata, 1);
+						if (ret)
+						pr_err("%s: Panel reset failed. rc=%d\n", __func__, ret);
+					}
+					else
+					{
+						gpio_set_value((ctrl_pdata->rst_gpio), 0);
+						udelay(5*1000);
+						gpio_set_value((ctrl_pdata->rst_gpio), 1);
 						pr_debug("********************%s,do something about reset**********************\n\n", __func__);
 					}
 				}
@@ -1468,6 +1436,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 				}
 				break;
 			case FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL:
+			case FIH_NT36672_H_GLASS_FHD_CTC_B2N_VIDEO_PANEL:
 				{
 					//SW4-HL-TP-B2N-NT36672-DoubleTap-00*{_20180302
 					pr_debug("\n\n******************** [HL]%s, %d: FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL\n", __func__, __LINE__);
@@ -1860,7 +1829,7 @@ static ssize_t mdss_dsi_cmd_state_read(struct file *file, char __user *buf,
 	if (blen < 0)
 		return 0;
 
-	if (copy_to_user(buf, buffer, blen))
+	if (copy_to_user(buf, buffer, min(count, (size_t)blen+1)))
 		return -EFAULT;
 
 	*ppos += blen;
@@ -2616,6 +2585,7 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 		pr_err("%s:Panel power on failed. rc=%d\n", __func__, ret);
 		goto end;
 	}
+	udelay(3*1000);
 
 	if (mdss_panel_is_power_on(cur_power_state)) {
 		pr_debug("%s: dsi_on from panel low power state\n", __func__);
@@ -2672,25 +2642,18 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
                         case FIH_CTC_OTM1911A_FHD_VIDEO_PANEL:
                         case FIH_AUO_OTM1911A_FHD_VIDEO_PANEL:		//SW4-HL-Display-OTM1911A-AUO-BringUp-00+_20180221
                         case FIH_CTC_JD9522Z_FHD_VIDEO_PANEL:           //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
+                            {
+                                    pr_debug("\n\n******************** [HL]%s: DRG  All Panels\n", __func__);
+
+                                    mdss_dsi_panel_reset(pdata, 1);
+                            }
+                            break;
                         case FIH_CTL_CTC_OTM1911A_FHD_VIDEO_PANEL:	//SW4-HL-Display-CTL-GT915L-CTC_n_AUO-BringUp-00+_20180226
                         case FIH_CTL_AUO_OTM1911A_FHD_VIDEO_PANEL:      //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
                         case FIH_CTL_CTC_JD9522Z_FHD_VIDEO_PANEL:       //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330				{
                                 {
-                                        pr_debug("\n\n******************** [HL]%s: DRG and CTL All Panels\n", __func__);
-					if (!gdouble_tap_enable_gt9xx)	//SW4-HL-TP-DRG_n_CTL-DoubleTap-00*_20180319
-					{
-						pr_debug("\n\n******************** [HL]%s: gdouble_tap_enable_gt9xx is FALSE\n", __func__);
-
-
-						mdss_dsi_panel_reset(pdata, 1);
-					}
-					else
-					{
-						pr_debug("\n\n******************** [HL]%s: gdouble_tap_enable_gt9xx is TRUE\n", __func__);
-
-						//Do Nothing
-						pr_debug("\n\n******************** [HL]%s: NOOOOOOOOOOOOOOOOOO Pull HIGH TP Reset Pin\n", __func__);
-					}
+                                        pr_debug("\n\n******************** [HL]%s: CTL All Panels\n", __func__);
+                                        mdss_dsi_panel_reset(pdata, 1);
 				}
 				break;
 			//SW4-HL-Display-BringUpCTCOTM1911A-00+}_20180116
@@ -2713,6 +2676,7 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 				}
 				break;
 			case FIH_FT8716U_1080P_CTC_VIDEO_PANEL:
+			case FIH_FT8719_1080P_VIDEO_PANEL:
 				{
 					if (!gdouble_tap_enable)
 						mdss_dsi_panel_reset(pdata, 1);
@@ -2748,6 +2712,7 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 				}
 				break;
 			case FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL:
+			case FIH_NT36672_H_GLASS_FHD_CTC_B2N_VIDEO_PANEL:
 				{
 					pr_debug("\n\n******************** [HL]%s, %d: FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL\n", __func__, __LINE__);
 					pr_debug("\n\n******************** [HL]%s, %d: gdouble_tap_enable_nvt = %d\n", __func__, __LINE__, gdouble_tap_enable_nvt);	
@@ -2950,7 +2915,6 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 		pr_err("%s: Invalid input data\n", __func__);
 		return -EINVAL;
 	}
-
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 	mipi = &pdata->panel_info.mipi;
@@ -3962,6 +3926,12 @@ int fih_set_cabc(int cabc)
 {
 	int res;
 
+ #if defined(CONFIG_PXLW_IRIS3)
+	if (iris_is_valid_cfg()) {
+		return 1;
+	}
+ #endif
+
 	res = mdss_dsi_panel_cabc_set(gpdata, cabc);
 	if (!res)	 //SW4-HL-Display-EnhanceErrorHandling-00*_20150320
 	{
@@ -4026,6 +3996,88 @@ void fih_set_write_reg(unsigned int len, char *data)
 EXPORT_SYMBOL(fih_set_write_reg);
 //SW4-HL-Display-ImplementCECTCABC-00+}_20160126
 
+//SW4-HL-Display-HDR-Ping-00+{_20180323
+//HDR Ping
+extern void iris_read_chip_id(void);
+int fih_hdr_ping (void)
+{
+        //pr_err("[HL]%s, %d: gHdrChipId = %d\n", __func__, __LINE__, gHdrChipId);
+        //iris\\_read_chip_id();
+
+        //if (gHdrChipId == 999)
+        //{
+        //    pr_err("[HL]%s, %d: gHdrChipId == 999, START to parse hdr_exist in cmdline or not...\n", __func__, __LINE__);
+            if(strstr(saved_command_line, "hdr") != NULL)
+            {
+                pr_err("[HL]%s, %d: kernel cmdline finds the string - hdr_exist, return 1\n", __func__, __LINE__);
+                return 1;
+            }
+            else
+            {
+                pr_err("[HL]%s, %d: kernel cmdline CAN NOT find the string - hdr_exist, return 0\n", __func__, __LINE__);
+                return 0;
+            }
+        //}
+        //else
+        //{
+        //    pr_err("[HL]%s, %d: gHdrChipId != 999, return gHdrChipId\n", __func__, __LINE__);
+        //}
+
+        //return gHdrChipId;
+}
+EXPORT_SYMBOL(fih_hdr_ping);
+//SW4-HL-Display-HDR-Ping-00+}_20180323
+
+//SW4-HL-Display-HDR-SetFsCurr-00+{_20180515
+int fih_get_fs_curr (void)
+{
+	return fs_curr_ua_set;
+}
+EXPORT_SYMBOL(fih_get_fs_curr);
+
+int fih_set_fs_curr(int fs_curr)
+{
+	int res;
+	int real_fs_curr;
+	
+	pr_err("[HL]%s, %d: fs_curr = %d <-- START\n", __func__, __LINE__, fs_curr);
+
+	if(fs_curr > 0)
+		g_fs_curr++;
+	else
+		g_fs_curr--;
+
+	if(g_fs_curr<=0)
+		g_fs_curr = 0;
+
+	if (/*fs_curr*/g_fs_curr>0)
+	{
+		pr_err("[HL]%s, %d\n", __func__, __LINE__);
+		real_fs_curr = px8418_fs_curr_ua;
+	}
+	else
+	{
+		pr_err("[HL]%s, %d\n", __func__, __LINE__);
+		real_fs_curr = g_wled_fs_curr_ua;
+	}
+
+	pr_err("[HL]%s, %d\n", __func__, __LINE__);
+
+	res = qpnp_wled_fs_curr_ua_set(real_fs_curr);
+	if (res)
+	{
+		return res;
+	}
+
+	fs_curr_ua_set = /*fs_curr*/!!g_fs_curr;
+
+	pr_err("[HL]%s, %d: <-- END\n", __func__, __LINE__);
+
+	return res;
+}
+EXPORT_SYMBOL(fih_set_fs_curr);
+//SW4-HL-Display-HDR-SetFsCurr-00+}_20180515
+
 static int fih_set_feature(void)
 {
 	int rc = 0;
@@ -4064,6 +4116,7 @@ EXPORT_SYMBOL(SendAIEOnlyAfterResume);
 //SW4-HL-Display-ImplementCECTCABC-00+}_20160126
 extern void fts_tp_lcm_suspend(void);//ZZDC-snow-Touch-_20170809
 extern void hlt_tp_lcm_suspend(void);//add by snow
+extern void fts_tp_lcm_suspend_8719(void);
 static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 				  int event, void *arg)
 {
@@ -4085,7 +4138,6 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 	pr_debug("%s+: ctrl=%d event=%d\n", __func__, ctrl_pdata->ndx, event);
 
 	MDSS_XLOG(event, arg, ctrl_pdata->ndx, 0x3333);
-
 	switch (event) {
 	case MDSS_EVENT_CHECK_PARAMS:
 		pr_debug("%s:Entered Case MDSS_EVENT_CHECK_PARAMS\n", __func__);
@@ -4111,6 +4163,9 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		break;
 	case MDSS_EVENT_UNBLANK:
 		pr_debug("[HL]%s: MDSS_EVENT_UNBLANK <-- start\n", __func__);
+#if defined(CONFIG_PXLW_IRIS3)
+		iris_display_prepare();
+#endif
 		if (ctrl_pdata->on_cmds.link_state == DSI_LP_MODE)
 			rc = mdss_dsi_unblank(pdata);
 		pr_debug("[HL]%s: MDSS_EVENT_UNBLANK <-- end\n", __func__);
@@ -4175,6 +4230,7 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 				}
 				break;
 			case FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL:
+			case FIH_NT36672_H_GLASS_FHD_CTC_B2N_VIDEO_PANEL:
 				{
 					pr_err("\n\n %s: FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL ***\n\n", __func__);
 
@@ -4191,6 +4247,14 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 					//pr_debug("\n\n*** [snow] %s, fts_tp_lcm_suspend() <-- START ***\n\n", __func__);
 					pr_debug("[snow] lcm is ctc suspend");
 					fts_tp_lcm_suspend();
+				}
+				break;
+			case FIH_FT8719_1080P_VIDEO_PANEL:
+				{
+					pr_debug("\n\n***%s: FIH_FT8719_1080P_VIDEO_PANEL ***\n\n", __func__);
+
+					pr_debug("lcm is 8719 suspend");
+					fts_tp_lcm_suspend_8719();
 				}
 				break;
 				//ZZDC sunqiupeng add for bringup PL2 2nd panel@20171226 begin
@@ -4221,6 +4285,43 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 
 		rc = mdss_dsi_off(pdata, power_state);
 		pr_debug("[HL]%s: MDSS_EVENT_PANEL_OFF <-- end\n", __func__);
+		break;
+	case MDSS_EVENT_CLOSE:
+		if (ctrl_pdata->panel_data.panel_info.panel_id == FIH_FT8719_1080P_VIDEO_PANEL)
+		{
+			if (!gdouble_tap_enable)
+			{
+				ret = mdss_dsi_panel_reset(pdata, 0);
+				if (ret) {
+					pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+					ret = 0;
+				}
+			
+				udelay(5 * 1000);
+				ret = msm_dss_enable_vreg(ctrl_pdata->panel_power_data.vreg_config, ctrl_pdata->panel_power_data.num_vreg, 0);
+				if (ret)
+					pr_err("%s: failed to disable vregs for %s\n", __func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+			}
+			else
+				pr_debug("********************%s, do nothing about power **********************\n\n", __func__);
+			
+			udelay(6 * 1000);
+			gpio_set_value(ctrl_pdata->iovdd_enable, 0);
+			gpio_free(ctrl_pdata->iovdd_enable);
+		}
+		break;
+	case MDSS_EVENT_SUSPEND:
+		if (ctrl_pdata->panel_data.panel_info.panel_id == FIH_FT8719_1080P_VIDEO_PANEL)
+		{
+			if (!gdouble_tap_enable)
+			{
+				ret = msm_dss_enable_vreg(ctrl_pdata->panel_power_data.vreg_config, ctrl_pdata->panel_power_data.num_vreg, 0);
+				if (ret)
+					pr_err("%s: failed to disable vregs for %s\n", __func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+			}
+			else
+				pr_debug("********************%s, do nothing about power **********************\n\n", __func__);
+		}
 		break;
 	case MDSS_EVENT_DISABLE_PANEL:
 		pr_debug("[HL]%s: MDSS_EVENT_DISABLE_PANEL <-- start\n", __func__);
@@ -4545,6 +4646,10 @@ static struct device_node *mdss_dsi_config_panel(struct platform_device *pdev,
 		of_node_put(dsi_pan_node);
 		return NULL;
 	}
+#if defined(CONFIG_PXLW_IRIS3)
+	iris_set_cfg_name(dsi_pan_node->name);
+#endif
+
 
 	rc = mdss_dsi_panel_init(dsi_pan_node, ctrl_pdata, ndx);
 	if (rc) {
@@ -5907,6 +6012,7 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 	 *  while parsing the panel node, then do not override it
 	 */
 	struct mdss_panel_data *pdata = &ctrl_pdata->panel_data;
+	int rc = 0;	//SW4-HL-Display-HDR-SetFsCurr-00+_20180515
 
 	if (ctrl_pdata->disp_en_gpio <= 0) {
 		ctrl_pdata->disp_en_gpio = of_get_named_gpio(
@@ -5955,8 +6061,13 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 	ctrl_pdata->hdr_rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 			 "px8418,reset-gpio", 0);
 	if (!gpio_is_valid(ctrl_pdata->hdr_rst_gpio))
-		pr_err("%s:%d, hdr reset gpio not specified\n",
-						__func__, __LINE__);	
+	{
+		pr_err("%s:%d, hdr reset gpio not specified\n", __func__, __LINE__);	
+	}
+	else
+	{
+		HDR_enable = 1;	//SW4-HL-Display-HDR-Ping-00+_20180323
+	}						
 	//HDR PX8148 wakeup pin
 	ctrl_pdata->hdr_wakeup_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 			 "px8418,wakeup-gpio", 0);
@@ -5985,6 +6096,14 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 		pr_err("%s:%d, iovdd gpio not specified\n",
 						__func__, __LINE__);
 	//SW4-JasonSH-Display-BringUpFT8716U-00+}_20170619	
+
+	//SW4-HL-Display-HDR-SetFsCurr-00+{_20180515
+	rc = of_property_read_u32(ctrl_pdev->dev.of_node,
+			"px8418,fs-curr-ua", &px8418_fs_curr_ua);
+	if (rc) {
+		pr_err("[HL]%s, %d: Unable to read full scale current\n", __func__, __LINE__);
+	}
+	//SW4-HL-Display-HDR-SetFsCurr-00+}_20180515
 
 	ctrl_pdata->lcd_mode_sel_gpio = of_get_named_gpio(
 			ctrl_pdev->dev.of_node, "qcom,panel-mode-gpio", 0);
@@ -6160,6 +6279,12 @@ int dsi_panel_device_register(struct platform_device *ctrl_pdev,
 	pinfo->cont_splash_enabled =
 		ctrl_pdata->mdss_util->panel_intf_status(pinfo->pdest,
 		MDSS_PANEL_INTF_DSI) ? true : false;
+#if defined(CONFIG_PXLW_IRIS3)
+	if(strstr(saved_command_line, "androidboot.mode=charger") != NULL)
+		iris_set_cont_splash(false);
+	else
+		iris_set_cont_splash(pinfo->cont_splash_enabled);
+#endif
 
 	pr_info("%s: Continuous splash %s\n", __func__,
 		pinfo->cont_splash_enabled ? "enabled" : "disabled");

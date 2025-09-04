@@ -1,6 +1,6 @@
 /* Copyright (c) 2005-2011 Atheros Communications Inc.
  * Copyright (c) 2011-2013 Qualcomm Atheros, Inc.
- * Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1063,6 +1063,7 @@ static int ath10k_snoc_get_soc_info(struct ath10k *ar)
 static int ath10k_snoc_wlan_enable(struct ath10k *ar)
 {
 	struct ath10k_wlan_enable_cfg cfg;
+	enum ath10k_driver_mode mode;
 	int pipe_num;
 	struct ath10k_ce_tgt_pipe_cfg tgt_cfg[CE_COUNT_MAX];
 
@@ -1093,8 +1094,9 @@ static int ath10k_snoc_wlan_enable(struct ath10k *ar)
 	cfg.shadow_reg_cfg = (struct ath10k_shadow_reg_cfg *)
 		&target_shadow_reg_cfg_map;
 
-	return ath10k_snoc_qmi_wlan_enable(ar, &cfg,
-					   ATH10K_MISSION, "5.1.0.26N");
+	mode = ar->testmode.utf_monitor ? ATH10K_FTM : ATH10K_MISSION;
+	return ath10k_snoc_qmi_wlan_enable(ar, &cfg, mode,
+					   "5.1.0.26N");
 }
 
 static int ath10k_snoc_bus_configure(struct ath10k *ar)
@@ -1151,12 +1153,15 @@ static int ath10k_snoc_hif_power_up(struct ath10k *ar)
 		atomic_set(&ar_snoc->pm_ops_inprogress, 0);
 	}
 
-	ret = ath10k_snoc_bus_configure(ar);
-	if (ret) {
-		ath10k_err(ar, "failed to configure bus: %d\n", ret);
-		return ret;
+	if ((ar->state == ATH10K_STATE_ON) ||
+	    (ar->state == ATH10K_STATE_RESTARTING) ||
+	    test_bit(ATH10K_FLAG_CRASH_FLUSH, &ar->dev_flags)) {
+		ret = ath10k_snoc_bus_configure(ar);
+		if (ret) {
+			ath10k_err(ar, "failed to configure bus: %d\n", ret);
+			return ret;
+		}
 	}
-
 	ret = ath10k_snoc_init_pipes(ar);
 	if (ret) {
 		ath10k_err(ar, "failed to initialize CE: %d\n", ret);
@@ -1629,9 +1634,9 @@ static int ath10k_snoc_probe(struct platform_device *pdev)
 	int ret;
 	struct ath10k *ar;
 	struct ath10k_snoc *ar_snoc;
-	struct ath10k_snoc_qmi_config *qmi_cfg;
 	enum ath10k_hw_rev hw_rev;
 	struct device *dev;
+	u32 chip_id;
 	u32 i;
 
 	dev = &pdev->dev;
@@ -1657,7 +1662,6 @@ static int ath10k_snoc_probe(struct platform_device *pdev)
 		goto err_core_destroy;
 	}
 
-	qmi_cfg = &ar_snoc->qmi_cfg;
 	spin_lock_init(&ar_snoc->opaque_ctx.ce_lock);
 	ar_snoc->opaque_ctx.bus_ops = &ath10k_snoc_bus_ops;
 	ath10k_snoc_resource_init(ar);
@@ -1693,6 +1697,12 @@ static int ath10k_snoc_probe(struct platform_device *pdev)
 		goto err_hw_power_off;
 	}
 
+	ret = ath10k_snoc_bus_configure(ar);
+	if (ret) {
+		ath10k_err(ar, "failed to configure bus: %d\n", ret);
+		goto err_hw_power_off;
+	}
+
 	ret = ath10k_snoc_alloc_pipes(ar);
 	if (ret) {
 		ath10k_err(ar, "failed to allocate copy engine pipes: %d\n",
@@ -1709,18 +1719,12 @@ static int ath10k_snoc_probe(struct platform_device *pdev)
 		goto err_free_pipes;
 	}
 
-	ar_snoc->drv_state = ATH10K_DRIVER_STATE_PROBED;
+	chip_id = ar_snoc->target_info.soc_version;
 	/* chip id needs to be retrieved from platform driver */
-	if (atomic_read(&qmi_cfg->fw_ready)) {
-		ret = ath10k_core_register(ar,
-					   ar_snoc->target_info.soc_version);
-		if (ret) {
-			ath10k_err(ar,
-				   "failed to register driver core: %d\n",
-				   ret);
-			goto err_free_irq;
-		}
-		ar_snoc->drv_state = ATH10K_DRIVER_STATE_STARTED;
+	ret = ath10k_core_register(ar, chip_id);
+	if (ret) {
+		ath10k_err(ar, "failed to register driver core: %d\n", ret);
+		goto err_free_irq;
 	}
 
 	ath10k_snoc_modem_ssr_register_notifier(ar);

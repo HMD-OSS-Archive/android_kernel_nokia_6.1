@@ -23,6 +23,8 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/input/mt.h>
 #include "gt9xx.h"
+#include <linux/time.h>
+#include <linux/unistd.h>
 
 //SW4-HL-TP-BringUpGT915L-01+{_20180201
 #include "../../../fih/fih_touch.h"
@@ -38,6 +40,7 @@ int gdouble_tap_enable_gt9xx;
 
 s32 fih_gtp_read_version(struct i2c_client *client, u16* version);
 //SW4-HL-TP-BringUpGT915L-01+}_20180201
+struct goodix_ts_data *pts=NULL;
 
 #define GOODIX_COORDS_ARR_SIZE  4
 #define PROP_NAME_SIZE      24
@@ -513,7 +516,7 @@ static void gtp_mt_slot_report(struct goodix_ts_data *ts, u8 touch_num,
 
             if (points->tool_type == GTP_TOOL_PEN) {
                 input_mt_report_slot_state(ts->input_dev,
-                               MT_TOOL_PEN, true);
+                               /*MT_TOOL_PEN*/MT_TOOL_FINGER, true);
                 pre_pen_id = points->id;
             } else {
                 input_mt_report_slot_state(ts->input_dev,
@@ -536,7 +539,7 @@ static void gtp_mt_slot_report(struct goodix_ts_data *ts, u8 touch_num,
             input_mt_slot(ts->input_dev, i);
             if (pre_pen_id == i) {
                 input_mt_report_slot_state(ts->input_dev,
-                               MT_TOOL_PEN, false);
+                               /*MT_TOOL_PEN*/MT_TOOL_FINGER, false);
                 /* valid id will < 10, so set id to 0xff to
                  * indicate a invalid state
                  */
@@ -591,6 +594,12 @@ static void gtp_work_func(struct goodix_ts_data *ts)
         return;
     }
 
+    if(ts->timestamp){
+        if(time_before(jiffies, ts->timestamp)){
+           pr_info("%s, time %u < timestamp %u\n",__func__,jiffies_to_msecs(jiffies),jiffies_to_msecs(ts->timestamp));
+           return;
+        }
+    }
     /* touch key event */
     if (key_value & 0xf0 || pre_key & 0xf0) {
         /* pen button */
@@ -1178,6 +1187,7 @@ dev_err(&ts->client->dev, "file_cfg_len=%d",file_cfg_len);
     }
 
   dev_err(&ts->client->dev, "OK file_cfg_len=%d",file_cfg_len);
+  fih_gtp_read_version(ts->client, 0);
 
     ret = count;
 send_cfg_err:
@@ -1681,7 +1691,7 @@ static s8 gtp_request_input_dev(struct goodix_ts_data *ts)
                  ts->pdata->max_touch_id, 0, 0);
     if (!ts->pdata->type_a_report) {
         input_set_abs_params(ts->input_dev, ABS_MT_TOOL_TYPE,
-                     0, MT_TOOL_MAX, 0, 0);
+                     0, /*MT_TOOL_MAX*/MT_TOOL_FINGER, 0, 0);
     } else {
         __set_bit(BTN_TOOL_PEN, ts->input_dev->keybit);
         __set_bit(BTN_TOOL_FINGER, ts->input_dev->keybit);
@@ -1935,31 +1945,33 @@ static int gtp_power_off(struct goodix_ts_data *ts)
 {
     int ret = 0;
 
-    if (ts->vcc_i2c) {
-        set_bit(POWER_OFF_MODE, &ts->flags);
-        ret = regulator_disable(ts->vcc_i2c);
-        if (ret) {
-            dev_err(&ts->client->dev,
-                "Regulator vcc_i2c disable failed ret=%d\n",
-                ret);
-            goto err_disable_vcc_i2c;
-        }
-        dev_info(&ts->client->dev,
-             "Regulator vcc_i2c disabled\n");
-    }
+	if (strstr(saved_command_line, "androidboot.device=TAS") == NULL) {
+	    if (ts->vcc_i2c) {
+	        set_bit(POWER_OFF_MODE, &ts->flags);
+	        ret = regulator_disable(ts->vcc_i2c);
+	        if (ret) {
+	            dev_err(&ts->client->dev,
+	                "Regulator vcc_i2c disable failed ret=%d\n",
+	                ret);
+	            goto err_disable_vcc_i2c;
+	        }
+	        dev_info(&ts->client->dev,
+	             "Regulator vcc_i2c disabled\n");
+	    }
 
-    if (ts->vdd_ana) {
-        set_bit(POWER_OFF_MODE, &ts->flags);
-        ret = regulator_disable(ts->vdd_ana);
-        if (ret) {
-            dev_err(&ts->client->dev,
-                    "Regulator vdd disable failed ret=%d\n",
-                    ret);
-            goto err_disable_vdd_ana;
-        }
-        dev_info(&ts->client->dev,
-             "Regulator vdd_ana disabled\n");
-    }
+	    if (ts->vdd_ana) {
+	        set_bit(POWER_OFF_MODE, &ts->flags);
+	        ret = regulator_disable(ts->vdd_ana);
+	        if (ret) {
+	            dev_err(&ts->client->dev,
+	                    "Regulator vdd disable failed ret=%d\n",
+	                    ret);
+	            goto err_disable_vdd_ana;
+	        }
+	        dev_info(&ts->client->dev,
+	             "Regulator vdd_ana disabled\n");
+	    }
+	}
     return ret;
 
 err_disable_vdd_ana:
@@ -2040,7 +2052,10 @@ void touch_upgrade_read_gt9xx(char *buf)
 
 void touch_upgrade_write_gt9xx(int flag)
 {
-
+    int ret=0;
+    pr_info("F@TOUCH %s flag=%d",__func__,flag);
+    if(pts)
+        ret = gup_init_update_proc(pts);
     return;
 }
 
@@ -2087,7 +2102,6 @@ int touch_double_tap_write_gt9xx(int enable)
 
     return 0;
 }
-EXPORT_SYMBOL(gdouble_tap_enable_gt9xx);
 //SW4-HL-TP-BringUpGT915L-01+}_20180201
 
 static int gtp_probe(struct i2c_client *client, const struct i2c_device_id *id)
@@ -2279,7 +2293,7 @@ static int gtp_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		  }
 #endif
 	  //
-
+    pts=ts;
     return 0;
 
 exit_powermanager:
@@ -2461,6 +2475,12 @@ static void fb_notify_resume_work(struct work_struct *work)
     struct goodix_ts_data *ts =
         container_of(work, struct goodix_ts_data, fb_notify_work);
     dev_info(&ts->client->dev, "try resume in workqueue\n");
+    //Add delay for both of DGR and CTL
+    usleep_range(150000,150100);
+    //Add delay only for CTL
+    if((ts->pdata->devinfo == DEV_CTL_HLT14)||(ts->fw_info.sensor_id == TRULY_ID))
+          usleep_range(200000,200100);
+    pr_info("F@TOUCH %s try resume delay in workqueue \n",__func__);
     gtp_resume(ts);
 }
 
@@ -2473,24 +2493,25 @@ static int gtp_fb_notifier_callback(struct notifier_block *noti,
             struct goodix_ts_data, notifier);
     int *blank;
 
-    if (ev_data && ev_data->data && event == FB_EVENT_BLANK && ts) {
+    if (ev_data && ev_data->data && event == FB_EARLY_EVENT_BLANK && ts) {
         blank = ev_data->data;
         if (*blank == FB_BLANK_UNBLANK ||
             *blank == FB_BLANK_NORMAL) {
-            pr_debug("F@TOUCH %s FB_BLANK_UNBLANK, NOOOOOOOOOOOO Resume by fb notifier HERE!\n",__func__);
+            pr_info("F@TOUCH %s FB_BLANK_UNBLANK, NOOOOOOOOOOOO Resume by fb notifier HERE!\n",__func__);
             gLcmOnOff = 1;
             dev_dbg(&ts->client->dev, "ts_resume");
-//            if (ts->pdata->resume_in_workqueue)
-//                schedule_work(&ts->fb_notify_work);
-//            else
-//                gtp_resume(ts);
+            if (ts->pdata->resume_in_workqueue)
+                schedule_work(&ts->fb_notify_work);
+            else
+                gtp_resume(ts);
+           ts->timestamp = 0;
         } else if (*blank == FB_BLANK_POWERDOWN) {
-            pr_debug("F@TOUCH %s FB_BLANK_POWERDOWN, NOOOOOOOOOOOO Suspend by fb notifier HERE!\n",__func__);
+            pr_info("F@TOUCH %s FB_BLANK_POWERDOWN, NOOOOOOOOOOOO Suspend by fb notifier HERE!\n",__func__);
             dev_dbg(&ts->client->dev, "ts_suspend");
             gLcmOnOff = 0;
-//            if (ts->pdata->resume_in_workqueue)
-//                flush_work(&ts->fb_notify_work);
- //           gtp_suspend(ts);
+            if (ts->pdata->resume_in_workqueue)
+                flush_work(&ts->fb_notify_work);
+           gtp_suspend(ts);
         }
     }
 
@@ -2592,8 +2613,10 @@ void fih_goodix_ts_suspend(void)
     pr_err("[HL]%s: goodix_ts_suspend(ts) <-- START\n", __func__);
     if (ts)
     {
-        pr_err("[HL]%s: ts exists, cotinute to call goodix_ts_resume(ts)\n", __func__);
-        gtp_suspend(ts);
+
+        ts->timestamp = jiffies + HZ/2 - HZ/10;
+        pr_err("[HL]%s: ts exists, cotinute to call goodix_ts_resume(%u, %u)\n", __func__,jiffies_to_msecs(ts->timestamp), jiffies_to_msecs(jiffies));
+//        gtp_suspend(ts);
     }
     pr_err("[HL]%s: goodix_ts_suspend(ts) <-- END\n", __func__);
 
@@ -2611,7 +2634,8 @@ void fih_goodix_ts_resume(void)
     if (ts)
     {
         pr_err("[HL]%s: ts exists, cotinute to call goodix_ts_resume(ts)\n", __func__);
-        gtp_resume(ts);
+        ts->timestamp = 0;
+//        gtp_resume(ts);
     }
     pr_err("[HL]%s: goodix_ts_resume(ts) <-- END\n", __func__);
 

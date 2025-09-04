@@ -27,6 +27,13 @@
 #include "mdss_dba_utils.h"
 #include "mdss_debug.h"
 
+#if defined(CONFIG_PXLW_IRIS3)
+#include "mdss_dsi_iris3.h"
+#include "mdss_dsi_iris3_lightup.h"
+#include "mdss_dsi_iris3_lightup_ocp.h"
+#include "mdss_dsi_iris3_pq.h"
+#endif
+
 //SW4-HL-Display-GlanceMode-00+{_20170524
 #ifdef CONFIG_AOD_FEATURE
 #include "fih/fih_msm_mdss_aod.h"
@@ -179,6 +186,13 @@ static void mdss_dsi_panel_bklt_pwm(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	pr_debug("%s: ndx=%d level=%d duty=%d\n", __func__,
 					ctrl->ndx, level, duty);
 
+#if defined(CONFIG_PXLW_IRIS3)
+	if (iris_is_valid_cfg()) {
+		/*continuous splash should not setting dbc use dma*/
+		if (IRIS_CONT_SPLASH_LK != iris_get_cont_splash_type())
+			iris_dbc_bl_user_set(level);
+	}
+#endif
 	if (ctrl->pwm_period >= USEC_PER_SEC) {
 		ret = pwm_config_us(ctrl->pwm_bl, duty, ctrl->pwm_period);
 		if (ret) {
@@ -308,6 +322,7 @@ static struct dsi_cmd_desc backlight_cmd = {
 	led_pwm1
 };
 
+
 static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 {
 	struct dcs_cmd_req cmdreq;
@@ -345,7 +360,14 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	else
 		cmdreq.flags |= CMD_REQ_LP_MODE;
 
+#if defined(CONFIG_PXLW_IRIS3)
+	if (iris_is_valid_cfg())
+		iris_panel_cmd_passthrough(ctrl, &cmdreq);
+	else
+		mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+#else
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+#endif
 }
 
 static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
@@ -372,7 +394,23 @@ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 						gpio_free(ctrl_pdata->hdr_rst_gpio);	
 					}
 					pr_debug("\n\n******************** [HL]%s, %d: gpio_request(ctrl_pdata->hdr_rst_gpio <-- END\n", __func__, __LINE__);
-				}					
+				}
+#if defined(CONFIG_PXLW_IRIS3)
+                               // Todo: why we could control wakeup gpio without request wakeup gpio.
+                           /* if (gpio_is_valid(ctrl_pdata->hdr_wakeup_gpio)) {
+                                    pr_err("[HL]%s, %d\n", __func__, __LINE__);
+                                    gpio_free(ctrl_pdata->hdr_wakeup_gpio);
+                                    pr_err("[HL]%s, %d\n", __func__, __LINE__);
+                                    pr_err("\n\n******************** [HL]%s, %d: gpio_request(ctrl_pdata->hdr_wakeup_gpio <-- START\n", __func__, __LINE__);
+                                    rc = gpio_request(ctrl_pdata->hdr_wakeup_gpio, "hdr_wakeup");
+                                    if (rc) {
+                                            pr_err("request hdr wakeup gpio failed,rc=%d\n", rc);
+                                            BBOX_LCM_GPIO_FAIL      //SW4-HL-Display-BBox-00+_20150610      //SW4-HL-Display-BBox-01*_20160804
+                                            gpio_free(ctrl_pdata->hdr_wakeup_gpio); 
+                                    }
+                                    pr_err("\n\n******************** [HL]%s, %d: gpio_request(ctrl_pdata->hdr_wakeup_gpio <-- END\n", __func__, __LINE__);
+                            }*/
+#endif
 			}
 			break;
 	}
@@ -393,8 +431,12 @@ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 	if (rc) {
 		pr_err("request reset gpio failed, rc=%d\n",
 			rc);
-		BBOX_LCM_GPIO_FAIL	//SW4-HL-Display-BBox-00+_20150610	//SW4-HL-Display-BBox-01*_20160804
-		goto rst_gpio_err;
+		if (ctrl_pdata->panel_data.panel_info.panel_id != FIH_FT8719_1080P_VIDEO_PANEL) {
+			BBOX_LCM_GPIO_FAIL	//SW4-HL-Display-BBox-00+_20150610	//SW4-HL-Display-BBox-01*_20160804
+			goto rst_gpio_err;
+		} else {
+			rc = 0;
+		}
 	}
 
 	if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
@@ -567,6 +609,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		switch (ctrl_pdata->panel_data.panel_info.panel_id)
 		{
 			case FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL:
+			case FIH_NT36672_H_GLASS_FHD_CTC_B2N_VIDEO_PANEL:
 				{
 					pr_debug("\n\n******************** [HL]%s, %d: FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL\n", __func__, __LINE__);
 					pr_debug("\n\n******************** [HL]%s, %d: gdouble_tap_enable_nvt = %d\n", __func__, __LINE__, gdouble_tap_enable_nvt);						
@@ -681,6 +724,35 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 				}
 				break;
 			//ZZDC sunqiupeng add for bringup PL2 2nd panel@20171226 start
+			case FIH_FT8719_1080P_VIDEO_PANEL:
+				{
+					if (pdata->panel_info.rst_seq_len) {
+						/*rc = gpio_direction_output(ctrl_pdata->tp_rst_gpio,pdata->panel_info.rst_seq[0]);
+						if (rc) {
+							pr_err("%s: unable to set dir for rst gpio\n",
+								__func__);
+							goto exit;
+						}
+						gpio_set_value((ctrl_pdata->tp_rst_gpio), 1);
+						usleep_range(2 * 1000, 2 * 1000);*/
+
+						rc = gpio_direction_output(ctrl_pdata->rst_gpio,
+							pdata->panel_info.rst_seq[0]);
+						if (rc) {
+							pr_err("%s: unable to set dir for rst gpio\n",
+								__func__);
+							goto exit;
+						}
+					}
+
+					for (i = 0; i < pdata->panel_info.rst_seq_len; ++i) {
+						gpio_set_value((ctrl_pdata->rst_gpio),
+							pdata->panel_info.rst_seq[i]);
+						if (pdata->panel_info.rst_seq[++i])
+							usleep_range(pinfo->rst_seq[i] * 1000, pinfo->rst_seq[i] * 1000);
+					}
+				}
+				break;
 			case FIH_R69338_1080P_VIDEO_PANEL_PL2:
 				{
 					if (pdata->panel_info.rst_seq_len) {
@@ -841,6 +913,14 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 				}
 				break;
 			//ZZDC sunqiupeng add for bringup PL2 2nd panel@20171226 start
+			case FIH_FT8719_1080P_VIDEO_PANEL:
+				{
+					gpio_set_value((ctrl_pdata->rst_gpio), 0);
+					gpio_set_value((ctrl_pdata->tp_rst_gpio), 0);
+					gpio_free(ctrl_pdata->rst_gpio);
+					gpio_free(ctrl_pdata->tp_rst_gpio);
+				}
+				break;
 			case FIH_R69338_1080P_VIDEO_PANEL_PL2:
 				{
 					gpio_set_value((ctrl_pdata->rst_gpio), 0);
@@ -1010,6 +1090,11 @@ static void mdss_dsi_send_col_page_addr(struct mdss_dsi_ctrl_pdata *ctrl,
 	/* Send default or dual roi 2A/2B cmd */
 	cmdreq.cmds = dual_roi ? set_dual_col_page_addr_cmd :
 		set_col_page_addr_cmd;
+
+#if defined(CONFIG_PXLW_IRIS3)
+	if (iris_is_valid_cfg())
+		iris_panel_cmd_passthrough(ctrl, &cmdreq);
+#endif
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
 
@@ -1222,6 +1307,9 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	struct mdss_dsi_ctrl_pdata *sctrl = NULL;
 	int res = 1;	//SW4-HL-Display-ImplementCECTCABC-00+_20160126
+#if defined(CONFIG_PXLW_IRIS3)
+	struct iris_setting_info *psetting = NULL;
+#endif
 
 	pr_debug("[HL]%s: <-- start\n", __func__);
 	pr_debug("[HL]%s: bl_level = %d\n", __func__, bl_level);
@@ -1320,6 +1408,9 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 		case FIH_CTC_OTM1911A_FHD_VIDEO_PANEL:
 		case FIH_AUO_OTM1911A_FHD_VIDEO_PANEL:	//SW4-HL-Display-OTM1911A-AUO-BringUp-00+_20180221
                 case FIH_CTC_JD9522Z_FHD_VIDEO_PANEL:           //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
+		case FIH_CTL_CTC_OTM1911A_FHD_VIDEO_PANEL:	//SW4-HL-Display-CTL-GT915L-CTC_n_AUO-BringUp-00+_20180226
+		case FIH_CTL_AUO_OTM1911A_FHD_VIDEO_PANEL:      //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
+		case FIH_CTL_CTC_JD9522Z_FHD_VIDEO_PANEL:       //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330 
 			{
                                 pr_debug("\n\n*** [HL] %s: FIH_CTC_OTM1911A_FHD_VIDEO_PANEL OR FIH_AUO_OTM1911A_FHD_VIDEO_PANEL OR FIH_CTC_JD9522Z_FHD_VIDEO_PANEL ***\n\n", __func__);
 				if (bl_level == 0)
@@ -1425,6 +1516,7 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 			break;
 		//SW4-HL-TP-B2N-NT36672-DoubleTap-00+{_20180302
 		case FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL:
+		case FIH_NT36672_H_GLASS_FHD_CTC_B2N_VIDEO_PANEL:
 			{
 				pr_debug("\n\n*** [HL] %s: FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL ***\n\n", __func__);
 				if (bl_level == 0)
@@ -1488,6 +1580,15 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	/* enable the backlight gpio if present */
 	mdss_dsi_bl_gpio_ctrl(pdata, bl_level);
 
+#if defined(CONFIG_PXLW_IRIS3)
+	psetting = iris_get_setting();
+	psetting->quality_cur.system_brightness = bl_level;
+	/* Don't set panel's brightness during HDR/SDR2HDR */
+	/* Set panel's brightness when sdr2hdr mode is 3 */
+	if (iris_is_valid_cfg() && psetting->quality_cur.pq_setting.sdr2hdr != SDR2HDR_Bypass && iris_get_sdr2hdr_mode() != 3)
+		return;
+#endif
+
 	switch (ctrl_pdata->bklt_ctrl) {
 	case BL_WLED:
 		pr_debug("\n\n******************** [HL] %s: BL_WLED	**********************\n\n",__func__);
@@ -1543,6 +1644,9 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 		case FIH_CTC_OTM1911A_FHD_VIDEO_PANEL:
 		case FIH_AUO_OTM1911A_FHD_VIDEO_PANEL:	//SW4-HL-Display-OTM1911A-AUO-BringUp-00+_20180221
                 case FIH_CTC_JD9522Z_FHD_VIDEO_PANEL:   //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
+		case FIH_CTL_CTC_OTM1911A_FHD_VIDEO_PANEL:	//SW4-HL-Display-CTL-GT915L-CTC_n_AUO-BringUp-00+_20180226
+		case FIH_CTL_AUO_OTM1911A_FHD_VIDEO_PANEL:      //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330
+		case FIH_CTL_CTC_JD9522Z_FHD_VIDEO_PANEL:       //SW4-HL-CTL-HDR-ReadLcmSwId-00+_20180330 
 			{
                                 pr_debug("\n\n*** [HL] %s: FIH_CTC_OTM1911A_FHD_VIDEO_PANEL OR FIH_AUO_OTM1911A_FHD_VIDEO_PANEL OR FIH_CTC_JD9522Z_FHD_VIDEO_PANEL ***\n\n", __func__);
 				if ((old_bl_level == 0) && (bl_level != 0))
@@ -1570,6 +1674,7 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 			break;
 		//SW4-HL-TP-B2N-NT36672-DoubleTap-00+{_20180302
 		case FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL:
+		case FIH_NT36672_H_GLASS_FHD_CTC_B2N_VIDEO_PANEL:
 			{
 				pr_debug("\n\n*** [HL] %s: FIH_NT36672_FHD_CTC_B2N_VIDEO_PANEL ***\n\n", __func__);
 				if ((old_bl_level == 0) && (bl_level != 0))
@@ -1853,15 +1958,68 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	//SW4-HL-Touch-ImplementDoubleTap-00+}_20170623
 
 	//SW4-JasonSH-Display-EnhanceErrorHandling-00*{_20170518
+#if defined(CONFIG_PXLW_IRIS3)
+	len = on_cmds->cmd_cnt;
+#if defined(IRIS3_ABYP_LIGHTUP)
+		// Use Iris3 Analog bypass mode to light up panel
+		// Assume the AP output is LP11 here
+		iris_abyp_lightup(ctrl);
+#else
+		if (iris_is_valid_cfg()) {
+			if (iris_abyp_lightup_get() == 0) {
+				iris_lightup(ctrl, on_cmds);
+				len = 0;
+			} else {
+				iris_abyp_lightup(ctrl);
+			}
+		}
+#endif
+	if (len)
+#else
 	if (on_cmds->cmd_cnt)
+#endif
 	{
 		//SW4-HL-Display-ShowLCMAndBacklightStatus-00+{_20160304
 		if ((strstr(saved_command_line, "androidboot.device=C1N") != NULL)
-			|| (strstr(saved_command_line, "androidboot.device=DRG") != NULL))
-		//	|| (strstr(saved_command_line, "androidboot.device=CTL") != NULL))
+                        || (strstr(saved_command_line, "androidboot.device=DRG") != NULL)
+                        || (strstr(saved_command_line, "androidboot.device=CTL") != NULL))
 		{
 			if (!(strnstr(saved_command_line, "androidboot.fihmode=2", strlen(saved_command_line))))
 			{
+				//SW4-HL-Display-C1NO-3148-00+{_20180508
+				if (ctrl->panel_data.panel_info.panel_id == FIH_ILI7807E_1080P_VIDEO_PANEL)
+				{
+					if (ctrl->mipi_term_resistor_04h_cmds.cmd_cnt)
+					{
+						pr_debug("[HL]%s, %d: START to send mipi_term_resistor_04h_cmds ...\n", __func__, __LINE__);
+						len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->mipi_term_resistor_04h_cmds, CMD_REQ_COMMIT);
+						pr_debug("[HL]%s, %d: END to send mipi_term_resistor_04h_cmds\n", __func__, __LINE__);
+					}
+					else if (ctrl->mipi_term_resistor_14h_cmds.cmd_cnt)
+					{
+						pr_debug("[HL]%s, %d: START to send mipi_term_resistor_14h_cmds ...\n", __func__, __LINE__);
+						len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->mipi_term_resistor_14h_cmds, CMD_REQ_COMMIT);
+						pr_debug("[HL]%s, %d: END to send mipi_term_resistor_14h_cmds\n", __func__, __LINE__);
+					}
+					else if (ctrl->mipi_term_resistor_24h_cmds.cmd_cnt)
+					{
+						pr_debug("[HL]%s, %d: START to send mipi_term_resistor_24h_cmds ...\n", __func__, __LINE__);
+						len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->mipi_term_resistor_24h_cmds, CMD_REQ_COMMIT);
+						pr_debug("[HL]%s, %d: END to send mipi_term_resistor_24h_cmds\n", __func__, __LINE__);
+					}
+					else if (ctrl->mipi_term_resistor_34h_cmds.cmd_cnt)
+					{
+						pr_debug("[HL]%s, %d: START to send mipi_term_resistor_34h_cmds ...\n", __func__, __LINE__);
+						len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->mipi_term_resistor_34h_cmds, CMD_REQ_COMMIT);
+						pr_debug("[HL]%s, %d: END to send mipi_term_resistor_34h_cmds\n", __func__, __LINE__);
+					}								
+					else
+					{					
+						pr_err("[HL]%s, %d: NOOOOOOOOOOOOOOOOOOOOOOOOOOOOO to send mipi term resistor cmdpage cmds ...\n", __func__, __LINE__);
+					}					
+				}
+				//SW4-HL-Display-C1NO-3148-00+}_20180508
+
 				if (ctrl->switch_cmdpage_cmds.cmd_cnt)
 				{
 					len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->switch_cmdpage_cmds, CMD_REQ_COMMIT);
@@ -1873,39 +2031,55 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 				do
 				{
 					mdss_dsi_panel_cmd_read(ctrl, power_status_reg[0], power_status_reg[1],
-									NULL, rx_buf, 1);
-					if (rx_buf[0] == 0x08)
-					{
-						pr_err("%s: LCM driver ic mipi interface is workable, status = 0x%x\n", __func__, rx_buf[0]);
-						break;
-					}
-					else
-					{
-						pr_err("%s: LCM driver ic mipi interface is not workable, status = 0x%x\n", __func__, rx_buf[0]);
+                                                                        NULL, rx_buf, 1);
 
-						//SW4-HL-Display-ForceLeaveGlanceModeIfPowerStatusIs0xDC-00+{_20170822
-						if (rx_buf[0] == 0xdc)
-						{
-							if (ctrl->glance_mode_off_cmds.cmd_cnt)
-							{
-								pr_err("%s: START to force ddic to leave  glance mode if 0x0A is 0xDC\n", __func__);
-								len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->glance_mode_off_cmds, CMD_REQ_COMMIT);
-								pr_err("%s: END to force ddic to leave glance mode if 0x0A is 0xDC\n", __func__);
-							}
-						}
-						//SW4-HL-Display-ForceLeaveGlanceModeIfPowerStatusIs0xDC-00+}_20170822
-						//SW4-HL-Display-Bypass0x08CheckMechanismIf0x0AIsNot0x08+{_20171214
-						else if ((rx_buf[0] == 0x98) || (rx_buf[0] == 0x9c))
-						{
-							pr_err("%s: Bypass 0x08 check mechanism and then let system send initial code to lcm driver ic if lcm power state(0x0A) is 0x98 or 0x9C\n", __func__);
-							break;
-						}
-						//SW4-HL-Display-Bypass0x08CheckMechanismIf0x0AIsNot0x08+}_20171214
-					}
+                                        if ((ctrl->panel_data.panel_info.panel_id == FIH_CTL_CTC_OTM1911A_FHD_VIDEO_PANEL) || (ctrl->panel_data.panel_info.panel_id == FIH_CTL_AUO_OTM1911A_FHD_VIDEO_PANEL) || (ctrl->panel_data.panel_info.panel_id == FIH_CTL_CTC_JD9522Z_FHD_VIDEO_PANEL))
+                                        {
+                                            if ((rx_buf[0] == 0x18) || (rx_buf[0] == 0x08))
+                                            {
+                                                    pr_err("%s: HDR ic is alive, status = 0x%x\n", __func__, rx_buf[0]);
+                                                    break;
+                                            }
 
-					mdelay(100);
+                                            mdelay(100);
 
-					pr_err("%s: LCM driver ic mipi interface is not workable, RetryReadPanelStatus = %d\n", __func__, RetryReadPanelStatus);
+                                            pr_err("%s: HDR ic is not alive, RetryReadPanelStatus = %d\n", __func__, RetryReadPanelStatus);
+                                        }
+                                        else
+                                        {
+                                            if (rx_buf[0] == 0x08)
+                                            {
+                                                    pr_err("%s: LCM driver ic mipi interface is workable, status = 0x%x\n", __func__, rx_buf[0]);
+                                                    break;
+                                            }
+                                            else
+                                            {
+                                                    pr_err("%s: LCM driver ic mipi interface is not workable, status = 0x%x\n", __func__, rx_buf[0]);
+
+                                                    //SW4-HL-Display-ForceLeaveGlanceModeIfPowerStatusIs0xDC-00+{_20170822
+                                                    if (rx_buf[0] == 0xdc)
+                                                    {
+                                                            if (ctrl->glance_mode_off_cmds.cmd_cnt)
+                                                            {
+                                                                    pr_err("%s: START to force ddic to leave  glance mode if 0x0A is 0xDC\n", __func__);
+                                                                    len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->glance_mode_off_cmds, CMD_REQ_COMMIT);
+                                                                    pr_err("%s: END to force ddic to leave glance mode if 0x0A is 0xDC\n", __func__);
+                                                            }
+                                                    }
+                                                    //SW4-HL-Display-ForceLeaveGlanceModeIfPowerStatusIs0xDC-00+}_20170822
+                                                    //SW4-HL-Display-Bypass0x08CheckMechanismIf0x0AIsNot0x08+{_20171214
+                                                    else if ((rx_buf[0] == 0x98) || (rx_buf[0] == 0x9c))
+                                                    {
+                                                            pr_err("%s: Bypass 0x08 check mechanism and then let system send initial code to lcm driver ic if lcm power state(0x0A) is 0x98 or 0x9C\n", __func__);
+                                                            break;
+                                                    }
+                                                    //SW4-HL-Display-Bypass0x08CheckMechanismIf0x0AIsNot0x08+}_20171214
+                                            }
+
+                                            mdelay(100);
+
+                                            pr_err("%s: LCM driver ic mipi interface is not workable, RetryReadPanelStatus = %d\n", __func__, RetryReadPanelStatus);
+                                        }
 
 					RetryReadPanelStatus++;
 				}
@@ -1972,6 +2146,40 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 			//SW4-HL-Display-ShowLCMAndBacklightStatus-00+{_20160304
 			if (!(strnstr(saved_command_line, "androidboot.fihmode=2", strlen(saved_command_line))))
 			{
+				//SW4-HL-Display-C1NO-3148-00+{_20180508
+				if (ctrl->panel_data.panel_info.panel_id == FIH_ILI7807E_1080P_VIDEO_PANEL)
+				{
+					if (ctrl->mipi_term_resistor_04h_cmds.cmd_cnt)
+					{
+						pr_debug("[HL]%s, %d: START to send mipi_term_resistor_04h_cmds ...\n", __func__, __LINE__);
+						len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->mipi_term_resistor_04h_cmds, CMD_REQ_COMMIT);
+						pr_debug("[HL]%s, %d: END to send mipi_term_resistor_04h_cmds\n", __func__, __LINE__);
+					}
+					else if (ctrl->mipi_term_resistor_14h_cmds.cmd_cnt)
+					{
+						pr_debug("[HL]%s, %d: START to send mipi_term_resistor_14h_cmds ...\n", __func__, __LINE__);
+						len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->mipi_term_resistor_14h_cmds, CMD_REQ_COMMIT);
+						pr_debug("[HL]%s, %d: END to send mipi_term_resistor_14h_cmds\n", __func__, __LINE__);
+					}
+					else if (ctrl->mipi_term_resistor_24h_cmds.cmd_cnt)
+					{
+						pr_debug("[HL]%s, %d: START to send mipi_term_resistor_24h_cmds ...\n", __func__, __LINE__);
+						len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->mipi_term_resistor_24h_cmds, CMD_REQ_COMMIT);
+						pr_debug("[HL]%s, %d: END to send mipi_term_resistor_24h_cmds\n", __func__, __LINE__);
+					}
+					else if (ctrl->mipi_term_resistor_34h_cmds.cmd_cnt)
+					{
+						pr_debug("[HL]%s, %d: START to send mipi_term_resistor_34h_cmds ...\n", __func__, __LINE__);
+						len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->mipi_term_resistor_34h_cmds, CMD_REQ_COMMIT);
+						pr_debug("[HL]%s, %d: END to send mipi_term_resistor_34h_cmds\n", __func__, __LINE__);
+					}								
+					else
+					{					
+						pr_err("[HL]%s, %d: NOOOOOOOOOOOOOOOOOOOOOOOOOOOOO to send mipi term resistor cmdpage cmds ...\n", __func__, __LINE__);
+					}					
+				}
+				//SW4-HL-Display-C1NO-3148-00+}_20180508
+
 				if (ctrl->switch_cmdpage_cmds.cmd_cnt)
 				{
 					len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->switch_cmdpage_cmds, CMD_REQ_COMMIT);
@@ -1982,37 +2190,73 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 				//SW4-HL-Display-CutOffPowerIfDdicStatusIsnotCorrect-00*{_20160912
 				do
 				{
-					mdss_dsi_panel_cmd_read(ctrl, power_status_reg[0], power_status_reg[1],
-									NULL, rx_buf, 1);
-					if (rx_buf[0] == 0x9C)
-					{
-						pr_err("%s: LCM Driver IC is alive, status = 0x%x\n", __func__, rx_buf[0]);
-						break;
-					}
-					else
-					{
-						pr_err("%s: LCM Driver IC is not alive, status = 0x%x\n", __func__, rx_buf[0]);
+                                        mdss_dsi_panel_cmd_read(ctrl, power_status_reg[0], power_status_reg[1],
+                                                                        NULL, rx_buf, 1);
 
-						//SW4-HL-Display-ForceLeaveGlanceModeIfPowerStatusIs0xDC-00+{_20170822
-						if (rx_buf[0] == 0xdc)
-						{
-							if (ctrl->glance_mode_off_cmds.cmd_cnt)
-							{
-								pr_err("%s: START to force ddic to leave  glance mode if 0x0A is 0xDC\n", __func__);
-								len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->glance_mode_off_cmds, CMD_REQ_COMMIT);
-								pr_err("%s: END to force ddic to leave glance mode if 0x0A is 0xDC\n", __func__);
-							}
-						}
-						//SW4-HL-Display-ForceLeaveGlanceModeIfPowerStatusIs0xDC-00+}_20170822
-						//SW4-HL-Display-ReSendInitCodeIfPowerStatusIsNot0x9CAnd0xDC-00+{_20170905
-						else
-						{
-							pr_err("%s: START to force re-send initial code if 0x0A is NOT 0x9C AND NOT 0xDC\n", __func__);
-							len = mdss_dsi_panel_cmds_send(ctrl, on_cmds, CMD_REQ_COMMIT);
-							pr_err("%s: END to force re-send initial code if 0x0A is NOT 0x9C AND NOT 0xDC\n", __func__);
-						}
-						//SW4-HL-Display-ReSendInitCodeIfPowerStatusIsNot0x9CAnd0xDC-00+{_20170905
-					}
+                                        if (ctrl->panel_data.panel_info.panel_id == FIH_CTL_CTC_JD9522Z_FHD_VIDEO_PANEL)
+                                        {
+                                                    if (rx_buf[0] == 0x18)
+                                                    {
+                                                            pr_err("%s: LCM Driver IC is alive, status = 0x%x\n", __func__, rx_buf[0]);
+                                                            break;
+                                                    }
+                                                    else
+                                                    {
+                                                            pr_err("%s: LCM Driver IC is not alive, status = 0x%x\n", __func__, rx_buf[0]);
+
+                                                            //SW4-HL-Display-ForceLeaveGlanceModeIfPowerStatusIs0xDC-00+{_20170822
+                                                            //if (rx_buf[0] == 0xdc)
+                                                            //{
+                                                            //        if (ctrl->glance_mode_off_cmds.cmd_cnt)
+                                                            //        {
+                                                            //                pr_err("%s: START to force ddic to leave  glance mode if 0x0A is 0xDC\n", __func__);
+                                                            //                len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->glance_mode_off_cmds, CMD_REQ_COMMIT);
+                                                            //                pr_err("%s: END to force ddic to leave glance mode if 0x0A is 0xDC\n", __func__);
+                                                            //        }
+                                                            //}
+                                                            //SW4-HL-Display-ForceLeaveGlanceModeIfPowerStatusIs0xDC-00+}_20170822
+                                                            //SW4-HL-Display-ReSendInitCodeIfPowerStatusIsNot0x9CAnd0xDC-00+{_20170905
+                                                            //else
+                                                            //{
+                                                                    pr_err("%s: START to force re-send initial code if 0x0A is NOT 0x9C AND NOT 0xDC\n", __func__);
+                                                                    len = mdss_dsi_panel_cmds_send(ctrl, on_cmds, CMD_REQ_COMMIT);
+                                                                    pr_err("%s: END to force re-send initial code if 0x0A is NOT 0x9C AND NOT 0xDC\n", __func__);
+                                                            //}
+                                                            //SW4-HL-Display-ReSendInitCodeIfPowerStatusIsNot0x9CAnd0xDC-00+{_20170905
+                                                    }
+                                        }
+                                        else
+                                        {
+                                                    if (rx_buf[0] == 0x9C)
+                                                    {
+                                                            pr_err("%s: LCM Driver IC is alive, status = 0x%x\n", __func__, rx_buf[0]);
+                                                            break;
+                                                    }
+                                                    else
+                                                    {
+                                                            pr_err("%s: LCM Driver IC is not alive, status = 0x%x\n", __func__, rx_buf[0]);
+
+                                                            //SW4-HL-Display-ForceLeaveGlanceModeIfPowerStatusIs0xDC-00+{_20170822
+                                                            if (rx_buf[0] == 0xdc)
+                                                            {
+                                                                    if (ctrl->glance_mode_off_cmds.cmd_cnt)
+                                                                    {
+                                                                            pr_err("%s: START to force ddic to leave  glance mode if 0x0A is 0xDC\n", __func__);
+                                                                            len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->glance_mode_off_cmds, CMD_REQ_COMMIT);
+                                                                            pr_err("%s: END to force ddic to leave glance mode if 0x0A is 0xDC\n", __func__);
+                                                                    }
+                                                            }
+                                                            //SW4-HL-Display-ForceLeaveGlanceModeIfPowerStatusIs0xDC-00+}_20170822
+                                                            //SW4-HL-Display-ReSendInitCodeIfPowerStatusIsNot0x9CAnd0xDC-00+{_20170905
+                                                            else
+                                                            {
+                                                                    pr_err("%s: START to force re-send initial code if 0x0A is NOT 0x9C AND NOT 0xDC\n", __func__);
+                                                                    len = mdss_dsi_panel_cmds_send(ctrl, on_cmds, CMD_REQ_COMMIT);
+                                                                    pr_err("%s: END to force re-send initial code if 0x0A is NOT 0x9C AND NOT 0xDC\n", __func__);
+                                                            }
+                                                            //SW4-HL-Display-ReSendInitCodeIfPowerStatusIsNot0x9CAnd0xDC-00+{_20170905
+                                                    }
+                                        }
 
 					mdelay(100);
 
@@ -2123,7 +2367,13 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 			goto end;
 	}
 
+#if defined(CONFIG_PXLW_IRIS3) && !defined(IRIS3_ABYP_LIGHTUP)
+	if (iris_is_valid_cfg())
+		iris_lightoff(ctrl, &ctrl->off_cmds);
+	else if (ctrl->off_cmds.cmd_cnt)
+#else
 	if (ctrl->off_cmds.cmd_cnt)
+#endif
 	{
 		//SW4-HL-Display-FixRedScreenWhileShutdownBacklighLed-01+{_20170809
 		if (BistMode)
@@ -3970,6 +4220,9 @@ int mdss_panel_parse_bl_settings(struct device_node *np,
 			pr_debug("%s: SUCCESS-> WLED TRIGGER register\n",
 				__func__);
 			ctrl_pdata->bklt_ctrl = BL_WLED;
+#if defined(CONFIG_PXLW_IRIS3)
+			iris_set_bklt_ctrl(bl_led_trigger);
+#endif
 		} else if (!strcmp(data, "bl_ctrl_pwm")) {
 			pr_debug("\n\n******************** [HL] %s: bl_ctrl_pwm	**********************\n\n", __func__);
 			ctrl_pdata->bklt_ctrl = BL_PWM;
@@ -4082,6 +4335,10 @@ void mdss_dsi_unregister_bl_settings(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	if (ctrl_pdata->bklt_ctrl == BL_WLED)
 		led_trigger_unregister_simple(bl_led_trigger);
+#if defined(CONFIG_PXLW_IRIS3)
+	if (ctrl_pdata->bklt_ctrl == BL_WLED)
+		iris_set_bklt_ctrl(NULL);
+#endif
 }
 
 static int mdss_dsi_panel_timing_from_dt(struct device_node *np,
@@ -4599,6 +4856,9 @@ static int mdss_panel_parse_dt(struct device_node *np,
 			MSM_DBA_CHIP_NAME_MAX_LEN);
 	}
 
+#if defined(CONFIG_PXLW_IRIS3)
+	iris_parse_params(np, ctrl_pdata, mdss_dsi_parse_dcs_cmds);
+#endif
 	rc = of_property_read_u32(np,
 		"qcom,mdss-dsi-host-esc-clk-freq-hz",
 		&pinfo->esc_clk_rate_hz);
@@ -4695,6 +4955,28 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->bist_mode_off_cmds,
 		"fih,bist-mode-off-command", "fih,bist-mode-off-command-state");
 	//SW4-HL-Display-FixRedScreenWhileShutdownBacklighLed-00+}_20170614
+
+	//SW4-HL-Display-C1NO-3148-00+{_20180508
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->mipi_term_resistor_04h_cmds,
+		"fih,mipi-termination-resistor-04h-command", "fih,mipi-termination-resistor-04h-command-state");	
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->mipi_term_resistor_14h_cmds,
+		"fih,mipi-termination-resistor-14h-command", "fih,mipi-termination-resistor-14h-command-state");	
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->mipi_term_resistor_24h_cmds,
+		"fih,mipi-termination-resistor-24h-command", "fih,mipi-termination-resistor-24h-command-state");	
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->mipi_term_resistor_34h_cmds,
+		"fih,mipi-termination-resistor-34h-command", "fih,mipi-termination-resistor-34h-command-state");	
+	//SW4-HL-Display-C1NO-3148-00+}_20180508
+
+	//SW4-HL-Display-C1NO-3148-00+{_20180508
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->mipi_term_resistor_04h_cmds,
+		"fih,mipi-termination-resistor-04h-command", "fih,mipi-termination-resistor-04h-command-state");	
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->mipi_term_resistor_14h_cmds,
+		"fih,mipi-termination-resistor-14h-command", "fih,mipi-termination-resistor-14h-command-state");	
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->mipi_term_resistor_24h_cmds,
+		"fih,mipi-termination-resistor-24h-command", "fih,mipi-termination-resistor-24h-command-state");	
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->mipi_term_resistor_34h_cmds,
+		"fih,mipi-termination-resistor-34h-command", "fih,mipi-termination-resistor-34h-command-state");	
+	//SW4-HL-Display-C1NO-3148-00+}_20180508
 
 	rc = of_property_read_u32(np, "fih,default-cabc-mode", &tmp);
 	cabc_set = (!rc ? tmp : 0);

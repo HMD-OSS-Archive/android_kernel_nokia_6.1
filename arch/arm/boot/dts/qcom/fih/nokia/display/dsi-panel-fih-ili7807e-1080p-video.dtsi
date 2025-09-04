@@ -348,6 +348,40 @@
 		];
 		fih,glance-mode-off-command-state = "dsi_lp_mode";
 		/* SW4-HL-Display-ForceLeaveGlanceModeIfPowerStatusIs0xDC-00+}_20170822 */
+
+		/* SW4-HL-Display-C1NO-3148-00+{_20180508 */
+		/* Modify MIPI Termination Test Cmd -- START */
+		fih,mipi-termination-resistor-04h-command = [
+			39 01 00 00 00 00 04 FF 78 07 06
+			15 01 00 00 0A 00 02 81 04
+		];
+		fih,mipi-termination-resistor-04h-command-state = "dsi_lp_mode";
+		
+		fih,mipi-termination-resistor-14h-command = [
+			/*
+			39 01 00 00 00 00 04 FF 78 07 06
+			15 01 00 00 0A 00 02 81 14
+			*/
+		];
+		fih,mipi-termination-resistor-14h-command-state = "dsi_lp_mode";		
+		
+		fih,mipi-termination-resistor-24h-command = [
+			/*
+			39 01 00 00 00 00 04 FF 78 07 06
+			15 01 00 00 0A 00 02 81 24
+			*/
+		];
+		fih,mipi-termination-resistor-24h-command-state = "dsi_lp_mode";	
+		
+		fih,mipi-termination-resistor-34h-command = [
+			/*
+			39 01 00 00 00 00 04 FF 78 07 06
+			15 01 00 00 0A 00 02 81 34
+			*/
+		];
+		fih,mipi-termination-resistor-34h-command-state = "dsi_lp_mode";			
+		/* Modify MIPI Termination Test Cmd -- END */
+		/* SW4-HL-Display-C1NO-3148-00+}_20180508 */
 	};
 };
 
